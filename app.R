@@ -12,7 +12,7 @@ if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.
 #if(!require(rsconnect)) install.packages("rsconnect", repos = "http://cran.us.r-project.org")
 
 ## Load in the data
-counties <- read.csv('us-counties3.30.csv') %>% as.data.frame()
+counties <- read.csv('us-counties3.31.csv') %>% as.data.frame()
 counties <- counties %>% mutate_all(as.character)
 counties$date <- as.Date(counties$date)
 county.pop <- read.csv('est2019-alldata.csv') %>% as.data.frame()
@@ -30,9 +30,15 @@ metro.options <- sort(unique(fips.codes$CSA.Title)[!is.na(unique(fips.codes$CSA.
 min.date <- '2020-03-10'
 min.cases.on.log <- 10
 #update.time <- paste(Sys.time() %>% format('%b %d'),', ',Sys.time() %>% format('%l:%M %p'),' EST.', sep = '')
-update.time <- 'March 30, 2:20 PM EST'
+update.time <- 'March 31, 10:25 AM EST'
 y.labels <- c('Confirmed Cases','Cases per 10,000 Residents')
 names(y.labels) <- c('ConfirmedCases','Casesper10000Residents')
+
+## Set up color codes for reference lines on log scale
+gg_color_hue <- function(n) {
+  hues = seq(15, 375, length = n + 1)
+  hcl(h = hues, l = 65, c = 100)[1:n]
+}
 
 # Define UI for application
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
@@ -72,7 +78,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    tags$br(),tags$br(),tags$h4("Summary"),
                    'This tool allows users to compare COVID-19 cases and growth rate across U.S. cities.',
                    tags$br(),tags$br(),tags$h4("Code"),
-                   "Will post to Github soon.",
+                   "Will release on Github soon.",
                    tags$br(),tags$br(),tags$h4("Sources"),
                    tags$b("COVID-19 cases: "), tags$a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times'), ", based on reports from state and local health agencies.", 
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), tags$a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget'), ".", 
@@ -82,7 +88,9 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    'Benjamin Wissel', tags$br(), 'MD-PhD Candidate', tags$br(), 'Department of Biomedical Informatics',tags$br(),"Cincinnati Children's Hospital Medical Center",tags$br(),'University of Cincinnati College of Medicine',
                    tags$br(),tags$br(),tags$h4("Contact"),
                    "benjamin.wissel@cchmc.org",tags$br(),
-                   tags$a(href="https://twitter.com/BDWissel", "@bdwissel")
+                   tags$a(href="https://twitter.com/BDWissel", "@bdwissel"),
+                   tags$br(),tags$br(),tags$h4("Acknowledgements"),
+                   'Thank you to', tags$a(href='https://www.cincinnatichildrens.org/bio/w/danny-wu','Dr. Danny Wu'), 'and ', tags$a(href='https://scholar.google.com/citations?user=NmQIjpAAAAAJ&hl=en','Sander Su'), 'for hosting this website on their server.',tags$br()
                  )
         )
 )
@@ -142,6 +150,11 @@ server <- function(input, output, session) {
     as.data.frame(case.data.log)
   })
   
+  reference <- eventReactive(input$button, {
+    reference <- data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/2)), ref = 'Doubling time: 2 days') %>% unique()
+    rbind(reference, data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/3)), ref = 'Doubling time: 3 days') %>% unique())
+  })
+  
   #OUTPUT PLOT
   output$plot1 <- renderPlot({
     
@@ -168,6 +181,8 @@ server <- function(input, output, session) {
       labs(title = 'COVID-19 Cases in U.S. Metropolitan Areas') +
       ylab('Confirmed Cases') +
       xlab('Number of Days Since 10th Case') +
+      geom_line(data=reference(), aes(x=x,y=y, group = ref, colour = ref), linetype = 'dashed') +
+      scale_color_manual(values=c(gg_color_hue(length(unique(case.data.log()[,1]))),"#000000", "#808080")) +
       theme(legend.title = element_blank(), plot.caption = element_text(hjust = 0), text = element_text(size=20)) 
   })
 }
