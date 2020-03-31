@@ -9,6 +9,7 @@ if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
 if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
 if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
+if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
 #if(!require(rsconnect)) install.packages("rsconnect", repos = "http://cran.us.r-project.org")
 
 ## Load in the data
@@ -151,8 +152,8 @@ server <- function(input, output, session) {
   })
   
   reference <- eventReactive(input$button, {
-    reference <- data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/2)), ref = 'Doubling time: 2 days') %>% unique()
-    rbind(reference, data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/3)), ref = 'Doubling time: 3 days') %>% unique())
+    reference <- data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/2)), ref = '2 days: doubling time') %>% unique()
+    rbind(reference, data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/3)), ref = '3 days: doubling time') %>% unique())
   })
   
   #OUTPUT PLOT
@@ -176,13 +177,13 @@ server <- function(input, output, session) {
       geom_point() + 
       geom_line() +
       theme_bw() +
-      scale_y_log10() +
+      scale_y_log10(labels = comma) +
       scale_x_continuous(limits = c(0,max(case.data.log()[,4])), breaks = seq(0, max(case.data.log()[,4]), by = 2)) +
       labs(title = 'COVID-19 Cases in U.S. Metropolitan Areas') +
       ylab('Confirmed Cases') +
       xlab('Number of Days Since 10th Case') +
       geom_line(data=reference(), aes(x=x,y=y, group = ref, colour = ref), linetype = 'dashed') +
-      scale_color_manual(values=c(gg_color_hue(length(unique(case.data.log()[,1]))),"#000000", "#808080")) +
+      scale_color_manual(values=c("#000000", "#808080",gg_color_hue(length(unique(case.data.log()[,1]))))) +
       theme(legend.title = element_blank(), plot.caption = element_text(hjust = 0), text = element_text(size=20)) 
   })
 }
