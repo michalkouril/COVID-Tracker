@@ -49,18 +49,22 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                   ),
                   helpText('Tip: type the city name for easy searching.'),hr(),
                   radioButtons("outcome", "Outcome", list("Confirmed cases" = 1, "Deaths" = 2), inline = T),
-                  radioButtons("timeComp", "Time comparison", list("By date" = 1, "Moment of first x" = 2), inline = T),
+                  radioButtons("timeComp", "Time comparison", list("By date" = 1, "By numbers" = 2), inline = T),
                   conditionalPanel(
-                    condition = "input.timeComp == 1",
+                    condition = "input.timeComp == 1 && input.advanced",
                     dateRangeInput("dateSlider", "Date range", start = Sys.Date() - 21, end = Sys.Date())
                   ),
                   conditionalPanel(
-                    condition = "input.timeComp == 2",
+                    condition = "input.timeComp == 2 && input.advanced",
                     numericInput("startCases", "Start cases/deaths", min = 1, max = 10000, value = 10, step = 1),
-                    numericInput("doublingRate", "Reference line day to double", min = 1, max = 21, value = 3, step = 1)
+                    numericInput("doublingRate", "Reference line days to double", min = 1, max = 21, value = 3, step = 1)
                   ),
                   radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
-                  checkboxInput("relPop", "Adjust for population size (per 10,000 people)"),
+                  conditionalPanel(
+                    condition = "input.advanced",
+                    checkboxInput("relPop", "Adjust for population size (per 10,000 people)")
+                  ),
+                  checkboxInput("advanced", "Show advanced options"),
                   tags$div(textOutput("filterWarnings"), style = "color: red;")
                 ),
                 mainPanel(
@@ -125,6 +129,13 @@ server <- function(input, output, session) {
   #Calculate the data to be displayed
    plot.data = reactive({
      
+     #If not advanced, set the startCases for cases to 10, deaths to 1
+     if(!input$advanced){
+       startCases = ifelse(input$outcome == 1, 10, 1)
+     } else {
+       startCases = input$startCases
+     }
+     
      #Make sure the plot only gets generated if there is at least one region selected
      req(!is.null(input$region))
 
@@ -132,17 +143,24 @@ server <- function(input, output, session) {
      groupByRegion = sym("CSA.Title")
      outcome = sym(ifelse(input$outcome == 1, "cases", "deaths"))
      
+     #If working by date, crop the data
+     covidNumbers = covidData() 
+     if(input$timeComp == 1){
+       covidNumbers = covidNumbers%>% filter(between(date, input$dateSlider[1], input$dateSlider[2]))
+     }
+     
      #Build the data for the plot
      plotData = fipsData %>% 
        filter(!!groupByRegion %in% input$region) %>% #Only use data needed (user selected regions)
        select(region = !!groupByRegion, FIPS) %>% group_by(region, FIPS) %>% 
-       left_join(covidData() %>% filter(between(date, input$dateSlider[1], input$dateSlider[2])), by = c("FIPS" = "fips")) %>% #Join the cases per fips
+       left_join(covidNumbers, by = c("FIPS" = "fips")) %>% #Join the cases per fips
        filter(!is.na(date)) %>% group_by(region, date) %>% #Now group per region
        summarise(cases = sum(cases), deaths = sum(deaths)) %>% 
        left_join(popByMetro, by = c("region" = "CSA.Title")) %>%
-       mutate(x = date, y = !!outcome) #add the population per region
+       mutate(x = date, y = !!outcome) %>% #add the population per region
+       filter(y > 0) #Only show cases / deaths more than 0
      
-     if(max(plotData$y) < input$startCases){
+     if(max(plotData$y) < startCases){
        filterWarning("No data met the criteria")
        req(F)
      }
@@ -151,14 +169,14 @@ server <- function(input, output, session) {
      omitted = NULL
      if(input$timeComp == 2){
        plotData = plotData %>% 
-         filter(y >= input$startCases) %>% group_by(region) %>% #Filter 10+
+         filter(y >= startCases) %>% group_by(region) %>% #Filter 10+
          mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
        omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
      }
      
      #Update warning if needed
      if(length(omitted) > 0){
-       filterWarning(paste("The following have a total less than", input$startCases, "cases and were omitted:", 
+       filterWarning(paste("The following have a total less than", startCases, "cases and were omitted:", 
                            paste(omitted, collapse = "; "))) #displayed as warning
      } else {
        filterWarning("")
@@ -177,6 +195,13 @@ server <- function(input, output, session) {
   #THis is the plot itself
   output$plot1 <- renderPlot({
     
+    #If not advanced, set the startCases for cases to 10, deaths to 1
+    if(!input$advanced){
+      startCases = ifelse(input$outcome == 1, 10, 1)
+    } else {
+      startCases = input$startCases
+    }
+    
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
       geom_point() +
       geom_line()
@@ -192,18 +217,18 @@ server <- function(input, output, session) {
       #Generate the doubline time using the doubleRate function (see at top)
       if(input$yScale == 2){
         plot = plot + 
-          stat_function(fun = ~log10(doubleRate(.x, input$startCases, input$doublingRate, pop)),
-                        linetype="dashed", colour = "gray", size = 2)
+          stat_function(fun = ~log10(doubleRate(.x, startCases, input$doublingRate, pop)),
+                        linetype="dashed", colour = "#8D8B8B", size = 2, alpha = 0.3)
       } else {
         plot = plot + 
-          stat_function(fun = ~doubleRate(.x, input$startCases, input$doublingRate, pop),
-                        linetype="dashed", colour = "gray", size = 2)
+          stat_function(fun = ~doubleRate(.x, startCases, input$doublingRate, pop),
+                        linetype="dashed", colour = "#8D8B8B", size = 2, alpha = 0.3)
       }
       
       plot = plot + ylim(c(NA, max(plot.data()$y))) +
         annotate("text",x=max(plot.data()$x)/2, #Add a label to the line
-                 y=doubleRate(max(plot.data()$x/2), input$startCases, input$doublingRate, pop),
-                 color = "#474a4f", size = 6,
+                 y=doubleRate(max(plot.data()$x/2), startCases, input$doublingRate, pop),
+                 color = "#696969", size = 6,
                  label=sprintf("Double every %.0f days", input$doublingRate))
     }
     
@@ -215,8 +240,8 @@ server <- function(input, output, session) {
     #Finalize the plot
     #Labels depend on selections
     xLabel = ifelse(input$timeComp == 1, "Date", 
-                    sprintf("Days from first %.0f %s", 
-                            input$startCases, 
+                    sprintf("Days from first %.0f or more %s", 
+                            startCases, 
                             ifelse(input$outcome == 1, "cases", "deaths")))
     yLabel = ifelse(input$relPop,ifelse(input$outcome == 1, "Cases per 10,000", "Deaths per 10,000"), 
                     ifelse(input$outcome == 1, "Cases", "Deaths"))
