@@ -13,7 +13,7 @@ if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-projec
 #if(!require(rsconnect)) install.packages("rsconnect", repos = "http://cran.us.r-project.org")
 
 ## Load in the data
-counties <- read.csv('us-counties3.31.csv') %>% as.data.frame()
+counties <- read.csv('us-counties.csv') %>% as.data.frame()
 counties <- counties %>% mutate_all(as.character)
 counties$date <- as.Date(counties$date)
 county.pop <- read.csv('est2019-alldata.csv') %>% as.data.frame()
@@ -28,10 +28,10 @@ colnames(metro.pop) <- c('metro','pop')
 metro.options <- sort(unique(fips.codes$CSA.Title)[!is.na(unique(fips.codes$CSA.Title))])
 
 ## Set some formatting things
-min.date <- '2020-03-10'
+min.date <- '2020-03-09'
 min.cases.on.log <- 10
 #update.time <- paste(Sys.time() %>% format('%b %d'),', ',Sys.time() %>% format('%l:%M %p'),' EST.', sep = '')
-update.time <- 'March 31, 10:25 AM EST'
+update.time <- 'April 1, 12:25 PM EST'
 y.labels <- c('Confirmed Cases','Cases per 10,000 Residents')
 names(y.labels) <- c('ConfirmedCases','Casesper10000Residents')
 
