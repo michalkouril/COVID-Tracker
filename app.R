@@ -7,39 +7,21 @@ if(!require(shiny)) install.packages("shiny", repos = "http://cran.us.r-project.
 if(!require(shinyWidgets)) install.packages("shinyWidgets", repos = "http://cran.us.r-project.org")
 if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://cran.us.r-project.org")
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
-#if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
-if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
-#if(!require(rsconnect)) install.packages("rsconnect", repos = "http://cran.us.r-project.org")
+
 
 ## Load in the data
-counties <- read.csv('us-counties3.31.csv') %>% as.data.frame()
-counties <- counties %>% mutate_all(as.character)
-counties$date <- as.Date(counties$date)
-county.pop <- read.csv('est2019-alldata.csv') %>% as.data.frame()
-county.pop <- county.pop %>% mutate_all(as.character)
-fips.codes <- read.xlsx('metro_fips_codes.xlsx') %>% as.data.frame()
-fips.codes$fips <- paste(fips.codes$FIPS.State.Code,fips.codes$FIPS.County.Code, sep = '')
-fips.codes$fips <- gsub('^0','',fips.codes$fips)
-fips.codes <- left_join(fips.codes, county.pop, by = 'fips')
-fips.codes$POPESTIMATE2019 <- as.integer(fips.codes$POPESTIMATE2019)
-metro.pop <- group_by(fips.codes, CSA.Title) %>% summarize(pop = sum(POPESTIMATE2019)) %>% as.data.frame()
-colnames(metro.pop) <- c('metro','pop')
-metro.options <- sort(unique(fips.codes$CSA.Title)[!is.na(unique(fips.codes$CSA.Title))])
+fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
+  mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019))
 
-## Set some formatting things
-min.date <- '2020-03-10'
-min.cases.on.log <- 10
-#update.time <- paste(Sys.time() %>% format('%b %d'),', ',Sys.time() %>% format('%l:%M %p'),' EST.', sep = '')
-update.time <- 'March 31, 10:25 AM EST'
-y.labels <- c('Confirmed Cases','Cases per 10,000 Residents')
-names(y.labels) <- c('ConfirmedCases','Casesper10000Residents')
+covidData = read.csv('us-counties3.31.csv', stringsAsFactors = F) %>% 
+  mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+         date = as.Date(date)) %>% select(-county, - state)
 
-## Set up color codes for reference lines on log scale
-gg_color_hue <- function(n) {
-  hues = seq(15, 375, length = n + 1)
-  hcl(h = hues, l = 65, c = 100)[1:n]
-}
+#Set some paratmeters
+popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019))
+update.time <- max(covidData$date, na.rm = T)
+
 
 # Define UI for application
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
@@ -48,32 +30,28 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
         tabPanel("Plots",
                sidebarLayout(  
                 sidebarPanel(
-                  selectInput(inputId = "MetrosChosen",
+                  selectInput(inputId = "region",
                               label = "Select one or more metro areas:",
-                              choices = metro.options,
+                              choices = sort(unique(fipsData$CSA.Title)),
                               selected = c('Cincinnati-Wilmington-Maysville, OH-KY-IN',"Cleveland-Akron-Canton, OH","Columbus-Marion-Zanesville, OH"),
                               multiple = T, 
                               selectize = T,
                               width = "400px"
                   ),
                   helpText('Tip: type the city name for easy searching.'),hr(),
-                  radioButtons("y.label", "Adjust for population size:",
-                               list("Yes" = "Casesper10000Residents",
-                                    "No" = "ConfirmedCases"), selected = 'ConfirmedCases'),
-                  br(),
-                  actionButton("button", "Submit")
+                  selectInput("timeComp", "Time comparison", choices = list("By date" = 1, "From first 10 cases" = 2)),
+                  selectInput("yScale", "Scale", choices = list("Linear" = 1, "Logarithmic" = 2)),
+                  checkboxInput("relPop", "Adjust for population size (cases / 10,000)"),
+                  tags$div(textOutput("filterWarnings"), style = "color: red;")
                 ),
                 mainPanel(
-                  tabsetPanel(
-                    tabPanel("Linear Scale", plotOutput(outputId = 'plot1', width = "1000px", height = "500px")),
-                    tabPanel("Log Scale", plotOutput(outputId = 'plot2', width = "1000px", height = "500px"))
-                  )
+                  plotOutput(outputId = 'plot1', height = "800px")
                 )
               )
         ),
         tabPanel("About this site",
                  tags$div(
-                   tags$h4("Last update"), 
+                   tags$h4("Last data update"), 
                    h6(paste0(update.time)),
                    "Updated once daily.",
                    tags$br(),tags$br(),tags$h4("Summary"),
@@ -98,94 +76,86 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
-  #GET THE DATA
-  plot.linear.data <- eventReactive(input$button, {
-    metro.fips <- fips.codes[fips.codes$CSA.Title %in% as.character(input$MetrosChosen), ] %>% as.data.frame()
-    metro.fips <- metro.fips[!is.na(metro.fips$CSA.Title), ]
-    metro.fips <- paste(metro.fips$FIPS.State.Code, metro.fips$FIPS.County.Code, sep = '')
-    metro.fips <- gsub('^0','',metro.fips)
-    
-    ## Get the case data from the fips codes
-    case.data <- counties[counties$fips %in% metro.fips, ] %>% as.data.frame()
-    case.data <- case.data[order(case.data$fips), ]
-    metro.fips.w.names <- cbind(fips.codes$CSA.Title, paste(paste(fips.codes$FIPS.State.Code, fips.codes$FIPS.County.Code, sep = ''))) %>% as.data.frame()
-    metro.fips.w.names <- metro.fips.w.names %>% mutate_all(as.character)
-    metro.fips.w.names$V2 <- gsub('^0','',metro.fips.w.names$V2)
-    metro.fips.w.names <- metro.fips.w.names[metro.fips.w.names$V2 %in% metro.fips, ]
-    metro.fips.w.names <- metro.fips.w.names[order(match(metro.fips.w.names$V2, case.data$fips)), ]
-    colnames(metro.fips.w.names) <- c('metro','fips')
-    case.data <- left_join(case.data, metro.fips.w.names, by = c('fips')) %>% as.data.frame()
-    case.data$cases <- as.integer(case.data$cases)
-    case.data <- group_by(case.data, metro, date) %>% summarize(cases = sum(cases))
-    case.data <- left_join(case.data,metro.pop , by = 'metro') %>% as.data.frame()
-    case.data$cases.per.10000 <- case.data$cases/case.data$pop*10000
-    colnames(case.data)[c(3,5)] <- c('ConfirmedCases', 'Casesper10000Residents')
-    case.data[case.data$date>= min.date, ] %>% as.data.frame()
-  })
   
-  case.data.log <- eventReactive(input$button, {
-    metro.fips <- fips.codes[fips.codes$CSA.Title %in% as.character(input$MetrosChosen), ] %>% as.data.frame()
-    metro.fips <- metro.fips[!is.na(metro.fips$CSA.Title), ]
-    metro.fips <- paste(metro.fips$FIPS.State.Code, metro.fips$FIPS.County.Code, sep = '')
-    metro.fips <- gsub('^0','',metro.fips)
-    
-    ## Get the case data from the fips codes
-    case.data <- counties[counties$fips %in% metro.fips, ] %>% as.data.frame()
-    case.data <- case.data[order(case.data$fips), ]
-    metro.fips.w.names <- cbind(fips.codes$CSA.Title, paste(paste(fips.codes$FIPS.State.Code, fips.codes$FIPS.County.Code, sep = ''))) %>% as.data.frame()
-    metro.fips.w.names <- metro.fips.w.names %>% mutate_all(as.character)
-    metro.fips.w.names$V2 <- gsub('^0','',metro.fips.w.names$V2)
-    metro.fips.w.names <- metro.fips.w.names[metro.fips.w.names$V2 %in% metro.fips, ]
-    metro.fips.w.names <- metro.fips.w.names[order(match(metro.fips.w.names$V2, case.data$fips)), ]
-    colnames(metro.fips.w.names) <- c('metro','fips')
-    case.data <- left_join(case.data, metro.fips.w.names, by = c('fips')) %>% as.data.frame()
-    case.data$cases <- as.integer(case.data$cases)
-    case.data <- group_by(case.data, metro, date) %>% summarize(cases = sum(cases))
-    case.data.log <- case.data[case.data$cases>=min.cases.on.log, ]
-    day.count <- table(case.data.log$metro) %>% as.integer()
-    days <- c()
-    for(city in 1:length(day.count)){
-      days <- c(days, seq(0,day.count[city]-1))
-    }
-    case.data.log$days <- days
-    as.data.frame(case.data.log)
-  })
+  filterWarning = reactiveVal("")
   
-  reference <- eventReactive(input$button, {
-    reference <- data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/2)), ref = '2 days: doubling time') %>% unique()
-    rbind(reference, data.frame(x=case.data.log()[,4],y=(10*2^(case.data.log()[,4]/3)), ref = '3 days: doubling time') %>% unique())
+  #Calculate the data to be displayed
+   plot.data = reactive({
+
+     #This will be used later when we can select different region levels (e.g. county, state, ...)
+     groupByRegion = sym("CSA.Title")
+     
+     #Build the data for the plot
+     plotData = fipsData %>% 
+       filter(!!groupByRegion %in% input$region) %>% #Only use data needed (user selected regions)
+       select(region = !!groupByRegion, FIPS) %>% group_by(region, FIPS) %>% 
+       left_join(covidData, by = c("FIPS" = "fips")) %>% #Join the cases per fips
+       filter(!is.na(date)) %>% group_by(region, date) %>% #Now group per region
+       summarise(cases = sum(cases), deaths = sum(deaths)) %>% 
+       left_join(popByMetro, by = c("region" = "CSA.Title")) %>% mutate(x = date) #add the population per region
+     
+     #In case the plot needs to show starting from 10 cases
+     if(input$timeComp == 2){
+       plotData = plotData %>% 
+         filter(cases >= 10) %>% group_by(region) %>% #Filter 10+
+         mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
+       omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
+       if(length(omitted) > 0)
+         filterWarning(paste("The following have a total less than 10 cases and were omitted:", 
+                             paste(omitted, collapse = "; "))) #displayed as warning
+     }
+     
+     #When cases per 10,000
+     if(input$relPop){
+       plotData = plotData %>% 
+         mutate(cases = cases / (population / 10000),
+                deaths = deaths / (population / 10000))
+     }
+     
+     plotData
   })
-  
-  #OUTPUT PLOT
+   
+   
+  #THis is the plot itself
   output$plot1 <- renderPlot({
     
-    ggplot(plot.linear.data(), aes_string(x='date', y=input$y.label, group = 'metro', colour = 'metro')) +
-      geom_point() + 
+    #Labels depend on selections
+    xLabel = ifelse(input$timeComp == 1, "Date", "Days from first 10 cases")
+    yLabel = ifelse(input$relPop,"Cases per 10,000", "Cases")
+
+    plot = ggplot(plot.data(), aes(x=x, y=cases, color = region)) +
+      geom_point() +
       geom_line() +
-      scale_x_date(date_breaks = "3 days", date_labels = "%b %d", limits = c(as.Date(min(plot.linear.data()[,2])), as.Date(max(plot.linear.data()[,2])))) +
       theme_bw() +
       labs(title = 'COVID-19 Cases in U.S. Metropolitan Areas') +
-      xlab('Date') +
-      ylab(y.labels[names(y.labels) %in% input$y.label]) +
-      theme(legend.position = 'right', legend.title = element_blank(), plot.caption = element_text(hjust = 0), text = element_text(size=20))
+      xlab(xLabel) + ylab(yLabel) +
+      theme(legend.position = 'bottom', legend.direction = "vertical", 
+            legend.title = element_blank(), 
+            plot.caption = element_text(hjust = 0), 
+            text = element_text(size=20))
     
+    #TODO for guides of doubling time
+    # if(input$timeComp == 2){
+    #   print("SHOW rate")
+    #   adj = ifelse(input$relPop, 1000, 1)
+    #   plot = plot +  stat_function(fun = function(x) 10*2^(x/3) / adj)
+    # }
+    
+    #In case log-scale, add this to y-axis
+    if(input$yScale == 2){
+      plot = plot + scale_y_log10()
+    } 
+
+
+    plot
+    
+  })
+  
+  #Warning when display after first 10 cases and regions don't have 10+
+  output$filterWarnings = renderText({
+    filterWarning()
   })
 
-  output$plot2 <- renderPlot({
-    
-    ggplot(case.data.log(), aes(x=days, y=cases, group = metro, colour = metro)) +
-      geom_point() + 
-      geom_line() +
-      theme_bw() +
-      scale_y_log10(labels = comma) +
-      scale_x_continuous(limits = c(0,max(case.data.log()[,4])), breaks = seq(0, max(case.data.log()[,4]), by = 2)) +
-      labs(title = 'COVID-19 Cases in U.S. Metropolitan Areas') +
-      ylab('Confirmed Cases') +
-      xlab('Number of Days Since 10th Case') +
-      geom_line(data=reference(), aes(x=x,y=y, group = ref, colour = ref), linetype = 'dashed') +
-      scale_color_manual(values=c("#000000", "#808080",gg_color_hue(length(unique(case.data.log()[,1]))))) +
-      theme(legend.title = element_blank(), plot.caption = element_text(hjust = 0), text = element_text(size=20)) 
-  })
 }
 
 shinyApp(ui = ui, server = server)
