@@ -14,13 +14,17 @@ if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-projec
 fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
   mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019))
 
-covidData = read.csv('us-counties3.31.csv', stringsAsFactors = F) %>% 
-  mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-         date = as.Date(date)) %>% select(-county, - state)
+#Link to the NYTimes data on GitHub
+sourceDataNYT <- reactiveFileReader(
+  intervalMillis = 3.6e+6, #Check every hour
+  session = NULL,
+  filePath = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv",
+  read.csv, stringsAsFactors=FALSE
+)
 
-#Set some paratmeters
+#Set some parameters
 popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019))
-update.time <- max(covidData$date, na.rm = T)
+
 
 #Function used to generate the doubleing rate guide
 doubleRate = function(x, startCases = 10, daysToDouble = 3, population = 10000, perHowMany = 10000) {
@@ -67,12 +71,14 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
         tabPanel("About this site",
                  tags$div(
                    tags$h4("Last data update"), 
-                   h6(paste0(update.time)),
-                   "Updated once daily.",
+                   textOutput("updateTime"),
+                   HTML("<i>Updated once daily</i>"),
+                   tags$h4("Last app update"), 
+                   HTML("2020-04-01 15:14:52 EDT"), #Sys.time()
                    tags$br(),tags$br(),tags$h4("Summary"),
                    'This tool allows users to compare COVID-19 cases and growth rate across U.S. cities.',
                    tags$br(),tags$br(),tags$h4("Code"),
-                   "Will release on Github soon.",
+                   "Will release on GitHub soon.",
                    tags$br(),tags$br(),tags$h4("Sources"),
                    tags$b("COVID-19 cases: "), tags$a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times'), ", based on reports from state and local health agencies.", 
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), tags$a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget'), ".", 
@@ -91,8 +97,30 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
+  #USE THIS DURING TESTING
+  covidData = reactive({
+    data = read.csv("us-counties3.31.csv", stringsAsFactors = F) %>% 
+      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+             date = as.Date(date)) %>% select(-county, - state)
+    updateTime(as.character(max(data$date, na.rm = T)))
+    data
+  })
   
+  # #USE THIS ONLINE
+  # covidData = reactive({
+  #   data = sourceDataNYT() %>% 
+  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+  #            date = as.Date(date)) %>% select(-county, - state)
+  #   updateTime(as.character(max(data$date, na.rm = T)))
+  #   data
+  # })
+  
+  updateTime = reactiveVal(Sys.Date())
   filterWarning = reactiveVal("")
+  
+  #Update the time on the page
+  output$updateTime = renderText(updateTime())
+  
   
   #Calculate the data to be displayed
    plot.data = reactive({
@@ -108,7 +136,7 @@ server <- function(input, output, session) {
      plotData = fipsData %>% 
        filter(!!groupByRegion %in% input$region) %>% #Only use data needed (user selected regions)
        select(region = !!groupByRegion, FIPS) %>% group_by(region, FIPS) %>% 
-       left_join(covidData %>% filter(between(date, input$dateSlider[1], input$dateSlider[2])), by = c("FIPS" = "fips")) %>% #Join the cases per fips
+       left_join(covidData() %>% filter(between(date, input$dateSlider[1], input$dateSlider[2])), by = c("FIPS" = "fips")) %>% #Join the cases per fips
        filter(!is.na(date)) %>% group_by(region, date) %>% #Now group per region
        summarise(cases = sum(cases), deaths = sum(deaths)) %>% 
        left_join(popByMetro, by = c("region" = "CSA.Title")) %>%
@@ -120,14 +148,20 @@ server <- function(input, output, session) {
      }
      
      #In case the plot needs to show starting from 10 cases
+     omitted = NULL
      if(input$timeComp == 2){
        plotData = plotData %>% 
-         filter(cases >= input$startCases) %>% group_by(region) %>% #Filter 10+
+         filter(y >= input$startCases) %>% group_by(region) %>% #Filter 10+
          mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
        omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
-       if(length(omitted) > 0)
-         filterWarning(paste("The following have a total less than", input$startCases, "cases and were omitted:", 
-                             paste(omitted, collapse = "; "))) #displayed as warning
+     }
+     
+     #Update warning if needed
+     if(length(omitted) > 0){
+       filterWarning(paste("The following have a total less than", input$startCases, "cases and were omitted:", 
+                           paste(omitted, collapse = "; "))) #displayed as warning
+     } else {
+       filterWarning("")
      }
      
      #When cases per 10,000
@@ -143,38 +177,30 @@ server <- function(input, output, session) {
   #THis is the plot itself
   output$plot1 <- renderPlot({
     
-    #Labels depend on selections
-    xLabel = ifelse(input$timeComp == 1, "Date", 
-                    sprintf("Days from first %.0f %s", 
-                            input$startCases, 
-                            ifelse(input$outcome == 1, "cases", "deaths")))
-    yLabel = ifelse(input$relPop,ifelse(input$outcome == 1, "Cases per 10,000", "Deaths per 10,000"), 
-                    ifelse(input$outcome == 1, "Cases", "Deaths"))
-
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
       geom_point() +
-      geom_line() +
-      theme_bw() +
-      labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
-                           ifelse(input$outcome == 1, "Cases", "Deaths"))) +
-      xlab(xLabel) + ylab(yLabel) +
-      theme(legend.position = 'bottom', legend.direction = "vertical", 
-            legend.title = element_blank(), 
-            plot.caption = element_text(hjust = 0), 
-            text = element_text(size=20))
+      geom_line()
     
     #Guide for doubling time
-    if(input$timeComp == 2){ #Only relevant when aligned by number of starting cases
+    if(input$timeComp == 2 && !input$relPop){ #Only relevant when aligned by number of starting cases
       
       #If the population is relative, make sure the guide is too (is average population of ones shown)
       pop = ifelse(input$relPop, 
                    mean(plot.data() %>% group_by(region) %>% summarise(p = max(population)) %>% pull(p)),
                    10000)
+      
       #Generate the doubline time using the doubleRate function (see at top)
-      plot = plot + 
-        stat_function(fun = ~doubleRate(.x, input$startCases, input$doublingRate, pop),
-                      linetype="dashed", colour = "gray", size = 2) +
-        ylim(NA, max(plot.data()$y)) + #Cut the y-limit to that of the data
+      if(input$yScale == 2){
+        plot = plot + 
+          stat_function(fun = ~log10(doubleRate(.x, input$startCases, input$doublingRate, pop)),
+                        linetype="dashed", colour = "gray", size = 2)
+      } else {
+        plot = plot + 
+          stat_function(fun = ~doubleRate(.x, input$startCases, input$doublingRate, pop),
+                        linetype="dashed", colour = "gray", size = 2)
+      }
+      
+      plot = plot + ylim(c(NA, max(plot.data()$y))) +
         annotate("text",x=max(plot.data()$x)/2, #Add a label to the line
                  y=doubleRate(max(plot.data()$x/2), input$startCases, input$doublingRate, pop),
                  color = "#474a4f", size = 6,
@@ -185,9 +211,24 @@ server <- function(input, output, session) {
     if(input$yScale == 2){
       plot = plot + scale_y_log10()
     } 
+    
+    #Finalize the plot
+    #Labels depend on selections
+    xLabel = ifelse(input$timeComp == 1, "Date", 
+                    sprintf("Days from first %.0f %s", 
+                            input$startCases, 
+                            ifelse(input$outcome == 1, "cases", "deaths")))
+    yLabel = ifelse(input$relPop,ifelse(input$outcome == 1, "Cases per 10,000", "Deaths per 10,000"), 
+                    ifelse(input$outcome == 1, "Cases", "Deaths"))
 
-
-    plot
+    plot + theme_bw() +
+      labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
+                           ifelse(input$outcome == 1, "Cases", "Deaths"))) +
+      xlab(xLabel) + ylab(yLabel) +
+      theme(legend.position = 'bottom', legend.direction = "vertical", 
+            legend.title = element_blank(), 
+            plot.caption = element_text(hjust = 0), 
+            text = element_text(size=20))
     
   })
   
