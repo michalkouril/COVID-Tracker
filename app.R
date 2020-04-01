@@ -56,15 +56,13 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                   ),
                   conditionalPanel(
                     condition = "input.timeComp == 2 && input.advanced",
-                    numericInput("startCases", "Start cases/deaths", min = 1, max = 10000, value = 10, step = 1),
-                    numericInput("doublingRate", "Reference line days to double", min = 1, max = 21, value = 3, step = 1)
+                    numericInput("startCases", "Start number", min = 1, max = 10000, value = 10, step = 1)
+                    # numericInput("doublingRate", "Reference line days to double", min = 1, max = 21, value = 3, step = 1)
                   ),
                   radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
-                  conditionalPanel(
-                    condition = "input.advanced",
-                    checkboxInput("relPop", "Adjust for population size (per 10,000 people)")
-                  ),
-                  checkboxInput("advanced", "Show advanced options"),
+                  checkboxInput("relPop", "Adjust for population size (per 10,000 people)"),
+                  tags$br(),
+                  tags$div(checkboxInput("advanced", "Show advanced options"), align = 'right', style = "color: gray;"),
                   tags$div(textOutput("filterWarnings"), style = "color: red;")
                 ),
                 mainPanel(
@@ -78,7 +76,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    textOutput("updateTime"),
                    HTML("<i>Updated once daily</i>"),
                    tags$h4("Last app update"), 
-                   HTML("2020-04-01 15:14:52 EDT"), #Sys.time()
+                   HTML("2020-04-01 16:54:36 EDT"), #Sys.time()
                    tags$br(),tags$br(),tags$h4("Summary"),
                    'This tool allows users to compare COVID-19 cases and growth rate across U.S. cities.',
                    tags$br(),tags$br(),tags$h4("Code"),
@@ -92,7 +90,9 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    'Benjamin Wissel, PJ Van Camp', tags$br(), 'Department of Biomedical Informatics',tags$br(),"Cincinnati Children's Hospital Medical Center",tags$br(),'University of Cincinnati College of Medicine',
                    tags$br(),tags$br(),tags$h4("Contact"),
                    "benjamin.wissel@cchmc.org",tags$br(),
-                   tags$a(href="https://twitter.com/BDWissel", "@bdwissel"),
+                   tags$a(href="https://twitter.com/BDWissel", "@bdwissel"), tags$br(), tags$br(),
+                   "vancampn@mail.uc.edu",tags$br(),
+                   tags$a(href="https://www.linkedin.com/in/pjvancamp/", "LinkedIn"), tags$br(),
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
                    'Thank you to', tags$a(href='https://www.cincinnatichildrens.org/bio/w/danny-wu','Dr. Danny Wu'), 'and ', tags$a(href='https://scholar.google.com/citations?user=NmQIjpAAAAAJ&hl=en','Sander Su'), 'for hosting this website on their server.',tags$br()
                  )
@@ -217,19 +217,25 @@ server <- function(input, output, session) {
       #Generate the doubline time using the doubleRate function (see at top)
       if(input$yScale == 2){
         plot = plot + 
-          stat_function(fun = ~log10(doubleRate(.x, startCases, input$doublingRate, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 2, alpha = 0.3)
+          stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
+                        linetype="dashed", colour = "#8D8B8B", size = 1.2, alpha = 0.3) +
+          stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
+                        linetype="dashed", colour = "#8D8B8B", size = 1.2, alpha = 0.3)
       } else {
         plot = plot + 
-          stat_function(fun = ~doubleRate(.x, startCases, input$doublingRate, pop),
-                        linetype="dashed", colour = "#8D8B8B", size = 2, alpha = 0.3)
+          stat_function(fun = ~doubleRate(.x, startCases, 2, pop),
+                        linetype="dashed", colour = "#8D8B8B", size = 1.2, alpha = 0.3) +
+          stat_function(fun = ~doubleRate(.x, startCases, 3, pop),
+                      linetype="dashed", colour = "#8D8B8B", size = 1.2, alpha = 0.3)
       }
       
-      plot = plot + ylim(c(NA, max(plot.data()$y))) +
-        annotate("text",x=max(plot.data()$x)/2, #Add a label to the line
-                 y=doubleRate(max(plot.data()$x/2), startCases, input$doublingRate, pop),
-                 color = "#696969", size = 6,
-                 label=sprintf("Double every %.0f days", input$doublingRate))
+      plot = plot + ylim(c(NA, max(plot.data()$y))) 
+        # scale_colour_manual(name = "Doubling rates", values = c("gray"), labels = c("Doubling rate per 2 or three days"))
+        # annotate("text",x=max(plot.data()$x)/2, #Add a label to the line
+        #          y=doubleRate(max(plot.data()$x/2), startCases, input$doublingRate, pop),
+        #          color = "#696969", size = 6,
+        #          label="Dotted lines are the doubling rate per 2 or 3 days")
+        
     }
     
     #In case log-scale, add this to y-axis
@@ -248,11 +254,13 @@ server <- function(input, output, session) {
 
     plot + theme_bw() +
       labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
-                           ifelse(input$outcome == 1, "Cases", "Deaths"))) +
+                           ifelse(input$outcome == 1, "Cases", "Deaths")),
+           caption =  ifelse(input$timeComp == 1 || input$relPop,
+                             "", "The dotted lines are the 2 and 3-day doubling rates ")) +
       xlab(xLabel) + ylab(yLabel) +
       theme(legend.position = 'bottom', legend.direction = "vertical", 
             legend.title = element_blank(), 
-            plot.caption = element_text(hjust = 0), 
+            plot.caption = element_text(hjust = 0.5, vjust = 30, face = "italic", size = 15, colour = "#5c5d5e"), 
             text = element_text(size=20))
     
   })
