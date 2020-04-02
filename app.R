@@ -117,11 +117,12 @@ server <- function(input, output, session) {
     data = sourceDataNYT() %>%
       mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
              date = as.Date(date)) %>% select(-county, - state)
-    updateTime(as.character(paste(Sys.Date() %>% format('%B %d'), ', ', Sys.time() %>% format('%l:%M %p'),' EST.', sep = '')))
+    #updateTime(as.character(paste(Sys.Date() %>% format('%B %d'), ', ', Sys.time() %>% format('%l:%M %p'),' EST.', sep = '')))
+    updateTime(as.character('April 2, 12:30 PM EST.'))
     data
   })
   
-  updateTime = reactiveVal(paste(Sys.time() %>% format('%l:%M %p'),' EST.', sep = ''))
+  updateTime = reactiveVal('April 2, 12:30 PM EST.')
   filterWarning = reactiveVal("")
   
   #Update the time on the page
