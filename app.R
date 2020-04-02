@@ -8,7 +8,7 @@ if(!require(shinyWidgets)) install.packages("shinyWidgets", repos = "http://cran
 if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://cran.us.r-project.org")
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
-
+options(scipen=10000)
 
 ## Load in the data
 fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
@@ -244,7 +244,7 @@ server <- function(input, output, session) {
         function(x) format(x,nsmall = decimals,scientific = FALSE)
       }
       
-      plot = plot + scale_y_log10(labels = label_comma(accuracy = 1))
+      plot = plot + scale_y_log10(labels = comma)
     } 
     
     #Finalize the plot
