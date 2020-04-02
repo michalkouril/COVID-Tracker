@@ -9,6 +9,7 @@ if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
 options(scipen=10000)
+Sys.setenv(TZ='America/New_York')
 
 ## Load in the data
 fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
