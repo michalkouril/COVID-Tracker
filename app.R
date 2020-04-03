@@ -102,7 +102,7 @@ server <- function(input, output, session) {
   #   data
   # })
   
-  #USE THIS ONLINE
+  # #USE THIS ONLINE
   covidData = reactive({
     data = sourceDataNYT() %>%
       mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
@@ -121,6 +121,7 @@ server <- function(input, output, session) {
   #Calculate the data to be displayed
    plot.data = reactive({
      
+
      startCases = ifelse(input$outcome == 1, 10, 1)
 
      #Make sure the plot only gets generated if there is at least one region selected
@@ -156,6 +157,7 @@ server <- function(input, output, session) {
      omitted = NULL
      if(input$yScale == 2){
        plotData = plotData %>% 
+
          filter(y >= startCases) %>% group_by(region) %>% #Filter 10+
          mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
        omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
@@ -186,7 +188,7 @@ server <- function(input, output, session) {
 
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
       geom_line(size = 1.2)
-    
+
     #Guide for doubling time
     if(input$yScale == 2){ #Only relevant when aligned by number of starting cases
       
@@ -194,6 +196,7 @@ server <- function(input, output, session) {
       pop = ifelse(F, 
                    mean(plot.data() %>% group_by(region) %>% summarise(p = max(population)) %>% pull(p)),
                    10000)
+
       
       #Generate the doubline time using the doubleRate function (see at top)
       if(input$yScale == 2){
@@ -201,6 +204,7 @@ server <- function(input, output, session) {
           stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
           stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
+
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
       } else {
         plot = plot + 
@@ -224,6 +228,7 @@ server <- function(input, output, session) {
     xLabel = ifelse(input$yScale == 1, "Date", 
                     paste("Number of Days Since",
                           ifelse(input$outcome == 1, "10th Case", "1st Death")))
+
     yLabel = ifelse(input$relPop == 1 && input$yScale == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", "Deaths per 10,000 Residents"), 
                     ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
 
@@ -237,6 +242,7 @@ server <- function(input, output, session) {
       theme(legend.position = 'right', legend.direction = "vertical", 
             legend.title = element_blank(), 
             plot.caption = element_text(hjust = 0.0), 
+
             text = element_text(size=20))
     
   })
@@ -245,7 +251,6 @@ server <- function(input, output, session) {
   output$filterWarnings = renderText({
     filterWarning()
   })
-
 }
 
 shinyApp(ui = ui, server = server)
