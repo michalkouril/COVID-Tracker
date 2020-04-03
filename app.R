@@ -198,7 +198,12 @@ server <- function(input, output, session) {
          mutate(y = y / (population / 10000))
      }
      
+     #Edit the order of the labels by descending y-value
+     myOrder = plotData %>% group_by(region) %>% summarise(y = max(y)) %>% arrange(desc(y))
+     plotData$region = factor(plotData$region, levels = c(myOrder$region))
+     
      plotData
+     
   })
    
    
