@@ -20,4 +20,3 @@ fipsData = fipsData %>%
 
 #Save
 write.csv(fipsData, "fipsData.csv", row.names = F)
-
