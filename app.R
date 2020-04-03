@@ -34,6 +34,28 @@ doubleRate = function(x, startCases = 10, daysToDouble = 3, population = 10000, 
   (startCases*2^(x/daysToDouble))/(population / perHowMany)
 }
 
+#Calculate the x-value for double rate if y is given
+getX = function(y, startCases = 10, daysToDouble = 3, population = 10000, perHowMany = 10000){
+  log2((y*population) / (startCases * perHowMany)) * daysToDouble
+}
+
+#Calulcate the positions of the labels for the doubling rate lines
+labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 10000, perHowMany = 10000){
+  posX = maxX
+  posY = doubleRate(posX, startCases = startCases, daysToDouble = daysToDouble, 
+                    population = population, perHowMany = perHowMany)
+  
+  #If the Y for max X falls out of the plot range, recalculate based on the max Y in the data
+  if(posY > maxY){
+    posX = getX(maxY, startCases = startCases, daysToDouble = daysToDouble, 
+                population = population, perHowMany = perHowMany)
+    posY = doubleRate(posX, startCases = startCases, daysToDouble = daysToDouble, 
+                      population = population, perHowMany = perHowMany)
+  }
+  
+  return(list(posX = posX, posY= posY))
+}
+
 
 # Define UI for application
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
@@ -93,23 +115,23 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
-  # #USE THIS DURING TESTING
-  # covidData = reactive({
-  #   data = read.csv("us-counties.csv", stringsAsFactors = F) %>% 
-  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-  #            date = as.Date(date)) %>% select(-county, - state)
-  #   updateTime(as.character(max(data$date, na.rm = T)))
-  #   data
-  # })
-  
-  # #USE THIS ONLINE
+  #USE THIS DURING TESTING
   covidData = reactive({
-    data = sourceDataNYT() %>%
+    data = read.csv("us-counties.csv", stringsAsFactors = F) %>%
       mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
              date = as.Date(date)) %>% select(-county, - state)
     updateTime(as.character(max(data$date, na.rm = T)))
     data
   })
+  
+  # # #USE THIS ONLINE
+  # covidData = reactive({
+  #   data = sourceDataNYT() %>%
+  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+  #            date = as.Date(date)) %>% select(-county, - state)
+  #   updateTime(as.character(max(data$date, na.rm = T)))
+  #   data
+  # })
   
   updateTime = reactiveVal('April 3, 09:30 AM EST.')
   filterWarning = reactiveVal("")
@@ -120,7 +142,6 @@ server <- function(input, output, session) {
   
   #Calculate the data to be displayed
    plot.data = reactive({
-     
 
      startCases = ifelse(input$outcome == 1, 10, 1)
 
@@ -206,23 +227,27 @@ server <- function(input, output, session) {
           stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
 
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
+        
+        twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
+        threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
       } else {
         plot = plot + 
           stat_function(fun = ~doubleRate(.x, startCases, 2, pop),
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
           stat_function(fun = ~doubleRate(.x, startCases, 3, pop),
                       linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
+        
+        twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
+        threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
       }
       
-      plot = plot + ylim(c(NA, max(plot.data()$y))) 
+      plot = plot +
+        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "Double every\n2 days") +
+        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "Double every\n3 days") + 
+        scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
         
     }
-    
-    #In case log-scale, add this to y-axis
-    if(input$yScale == 2){
-      plot = plot + scale_y_log10(labels = comma)
-    } 
-    
+
     #Finalize the plot
     #Labels depend on selections
     xLabel = ifelse(input$yScale == 1, "Date", 
