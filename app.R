@@ -242,8 +242,8 @@ server <- function(input, output, session) {
       }
       
       plot = plot +
-        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "Double every\n2 days") +
-        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "Double every\n3 days") + 
+        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "Double every\n2 days", color = "#8D8B8B") +
+        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "Double every\n3 days", color = "#8D8B8B") + 
         scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
         
     }
