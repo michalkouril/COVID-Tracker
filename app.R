@@ -17,6 +17,9 @@ Sys.setenv(TZ='America/New_York')
 fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
   mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019))
 
+#Merge the state and county for search of county
+fipsData$stateCounty = paste(fipsData$State.Name, "-", fipsData$County.County.Equivalent)
+
 #Link to the NYTimes data on GitHub
 sourceDataNYT <- reactiveFileReader(
   intervalMillis = 3.6e+6, #Check every hour
@@ -64,10 +67,10 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
         tabPanel("Plots",
                sidebarLayout(  
                 sidebarPanel(
-                  selectInput(inputId = "region",
-                              label = "Select one or more metro areas",
-                              choices = sort(unique(fipsData$CSA.Title)),
-                              selected = c("Seattle-Tacoma, WA","Boston-Worcester-Providence, MA-RI-NH-CT","San Jose-San Francisco-Oakland, CA"),
+                  radioButtons("regionType", "Region detail", list("Metro areas" = "CSA.Title", "Counties" = "stateCounty"), inline = T),
+                   selectInput(inputId = "region",
+                              label = "Select one or more regions",
+                              choices = "",
                               multiple = T, 
                               selectize = T,
                               width = "400px"
@@ -117,10 +120,18 @@ server <- function(input, output, session) {
   
   #USE THIS DURING TESTING
   covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F) %>%
+    data = read.csv("us-counties.csv", stringsAsFactors = F) 
+    #Add the special cases
+    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+    
+    data = data %>%
       mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
              date = as.Date(date)) %>% select(-county, - state)
+    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+    data[data$county == "Kansas City", "fips"] = "00001"
     updateTime(as.character(max(data$date, na.rm = T)))
+    
     data
   })
   
@@ -139,17 +150,26 @@ server <- function(input, output, session) {
   #Update the time on the page
   output$updateTime = renderText(updateTime())
   
+  observeEvent(input$regionType, {
+    if(input$regionType == "CSA.Title"){
+      updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
+                        selected = c("Seattle-Tacoma, WA","Boston-Worcester-Providence, MA-RI-NH-CT","San Jose-San Francisco-Oakland, CA"))
+    } else {
+      updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
+                        selected = "New York - New York County")
+    }
+  })
   
   #Calculate the data to be displayed
    plot.data = reactive({
 
-     startCases = ifelse(input$outcome == 1, 10, 1)
-
      #Make sure the plot only gets generated if there is at least one region selected
      req(!is.null(input$region))
+     
+     startCases = ifelse(input$outcome == 1, 10, 1)
 
      #This will be used later when we can select different region levels (e.g. county, state, ...)
-     groupByRegion = sym("CSA.Title")
+     groupByRegion = sym(input$regionType)
      outcome = sym(ifelse(input$outcome == 1, "cases", "deaths"))
      
      #If working by date, crop the data
