@@ -8,6 +8,7 @@ if(!require(shinyWidgets)) install.packages("shinyWidgets", repos = "http://cran
 if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://cran.us.r-project.org")
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
+
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
 Sys.setenv(TZ='America/New_York')
@@ -92,23 +93,23 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
-  #USE THIS DURING TESTING
-  covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F) %>% 
-      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-             date = as.Date(date)) %>% select(-county, - state)
-    updateTime(as.character(max(data$date, na.rm = T)))
-    data
-  })
-  
-  # #USE THIS ONLINE
+  # #USE THIS DURING TESTING
   # covidData = reactive({
-  #   data = sourceDataNYT() %>% 
+  #   data = read.csv("us-counties.csv", stringsAsFactors = F) %>% 
   #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
   #            date = as.Date(date)) %>% select(-county, - state)
   #   updateTime(as.character(max(data$date, na.rm = T)))
   #   data
   # })
+  
+  #USE THIS ONLINE
+  covidData = reactive({
+    data = sourceDataNYT() %>%
+      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+             date = as.Date(date)) %>% select(-county, - state)
+    updateTime(as.character(max(data$date, na.rm = T)))
+    data
+  })
   
   updateTime = reactiveVal('April 3, 09:30 AM EST.')
   filterWarning = reactiveVal("")
