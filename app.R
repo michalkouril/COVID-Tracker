@@ -18,7 +18,7 @@ fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "charact
   mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019))
 
 #Merge the state and county for search of county
-fipsData$stateCounty = paste(fipsData$State.Name, "-", fipsData$County.County.Equivalent)
+fipsData$stateCounty = paste0(fipsData$State.Name, ": ", fipsData$County)
 
 #Link to the NYTimes data on GitHub
 sourceDataNYT <- reactiveFileReader(
@@ -30,6 +30,7 @@ sourceDataNYT <- reactiveFileReader(
 
 #Set some parameters
 popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019))
+popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
 
 
 #Function used to generate the doubleing rate guide
@@ -103,6 +104,17 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), tags$a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget'), ".", 
                    tags$br(),tags$b("Population estimates: "), tags$a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau'), ".", 
                    tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch'),' and', tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker'),', respectively.',
+                   tags$br(),tags$br(),
+                   HTML("<i>Note on data</i><br>
+                        Several areas are not grouped by county or metropolitan area,
+                        although you can still search for them:<ul><li><b>New York City</b>: The five boroughs of New York City
+                        (New York, Kings, Queens, Bronx and Richmond counties) are assigned to a single area called New York City
+                        </li><li><b>Kansas City</b>: Four counties (Cass, Clay, Jackson and Platte) overlap the municipality
+                        of Kansas City, Mo. The cases and deaths that we show for these four counties are only for the portions
+                        exclusive of Kansas City. Cases and deaths for Kansas City are reported as their own line</li>
+                        <li><b>Chicago</b>: All cases and deaths for Chicago are reported as part of Cook County</li></ul>
+                        For details, visit the <a href='https://github.com/nytimes/covid-19-data'>New York Times GitHub</a>"
+                   ),
                    tags$br(),tags$br(),tags$h4("Authors"),
                    "Benjamin Wissel, Department of Biomedical Informatics, Cincinnati Children's Hospital Medical Center", tags$br(), "Dr. PJ Van Camp, Department of Biomedical Informatics, Cincinnati Children's Hospital Medical Center",
                    tags$br(),tags$br(),tags$h4("Contact"),
@@ -118,40 +130,47 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
-  showModal(modalDialog(title = "IMPORTANT NOTE", HTML(
-    "Several areas are not grouped by county or metropolitan area,
-    although you can still search for them:<ul><li><b>New York City</b>: The five boroughs of New York City
-    (New York, Kings, Queens, Bronx and Richmond counties) are assigned to a single area called New York City
-    </li><li><b>Kansas City</b>: Four counties (Cass, Clay, Jackson and Platte) overlap the municipality
-    of Kansas City, Mo. The cases and deaths that we show for these four counties are only for the portions
-    exclusive of Kansas City. Cases and deaths for Kansas City are reported as their own line</li>
-    <li><b>Chicago</b>: All cases and deaths for Chicago are reported as part of Cook County</li></ul>
-    For details, visit the <a href='https://github.com/nytimes/covid-19-data'>New York Times GitHub</a>"
-  )))
+  # showModal(modalDialog(title = "IMPORTANT NOTE", HTML(<h4>NOTE on data</h4>
+  #   "Several areas are not grouped by county or metropolitan area,
+  #   although you can still search for them:<ul><li><b>New York City</b>: The five boroughs of New York City
+  #   (New York, Kings, Queens, Bronx and Richmond counties) are assigned to a single area called New York City
+  #   </li><li><b>Kansas City</b>: Four counties (Cass, Clay, Jackson and Platte) overlap the municipality
+  #   of Kansas City, Mo. The cases and deaths that we show for these four counties are only for the portions
+  #   exclusive of Kansas City. Cases and deaths for Kansas City are reported as their own line</li>
+  #   <li><b>Chicago</b>: All cases and deaths for Chicago are reported as part of Cook County</li></ul>
+  #   For details, visit the <a href='https://github.com/nytimes/covid-19-data'>New York Times GitHub</a>"
+  # )))
   
   #USE THIS DURING TESTING
   covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F) 
+    data = read.csv("us-counties.csv", stringsAsFactors = F)
     #Add the special cases
     data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
     data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-    
+
     data = data %>%
       mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
              date = as.Date(date)) %>% select(-county, - state)
     data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
     data[data$county == "Kansas City", "fips"] = "00001"
     updateTime(as.character(max(data$date, na.rm = T)))
-    
+
     data
   })
   
-  # # #USE THIS ONLINE
+  # # USE THIS ONLINE
   # covidData = reactive({
-  #   data = sourceDataNYT() %>%
+  #   data = sourceDataNYT()
+  #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+  #   
+  #   data = data %>%
   #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
   #            date = as.Date(date)) %>% select(-county, - state)
+  #   data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+  #   data[data$county == "Kansas City", "fips"] = "00001"
   #   updateTime(as.character(max(data$date, na.rm = T)))
+  #   
   #   data
   # })
   
@@ -168,7 +187,7 @@ server <- function(input, output, session) {
                         selected = c("Seattle-Tacoma, WA"))
     } else {
       updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
-                        selected = "Ohio - Hamilton County")
+                        selected = "Ohio: Hamilton County")
     }
   })
   
@@ -198,8 +217,17 @@ server <- function(input, output, session) {
        select(region = !!groupByRegion, FIPS) %>% group_by(region, FIPS) %>% 
        left_join(covidNumbers, by = c("FIPS" = "fips")) %>% #Join the cases per fips
        filter(!is.na(date)) %>% group_by(region, date) %>% #Now group per region
-       summarise(cases = sum(cases), deaths = sum(deaths)) %>% 
-       left_join(popByMetro, by = c("region" = "CSA.Title")) %>%
+       summarise(cases = sum(cases), deaths = sum(deaths)) 
+     
+     if(isolate(input$regionType) == "CSA.Title"){
+       plotData = plotData %>% 
+         left_join(popByMetro, by = c("region" = "CSA.Title")) 
+     } else {
+       plotData = plotData %>% 
+         left_join(popByCounty, by = c("region" = "stateCounty"))
+     }
+     
+     plotData = plotData %>%
        mutate(x = date, y = !!outcome) %>% #add the population per region
        filter(y > 0) #Only show cases / deaths more than 0
      
@@ -297,6 +325,9 @@ server <- function(input, output, session) {
                     ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
 
     plot + theme_bw() +
+      geom_text(data = plot.data() %>% filter(date == last(date)), 
+                aes(label = if(input$relPop == 2){ y}else{ sprintf("%.2f", y)}, 
+                    x = x, y = y), size = 5, check_overlap = T,  nudge_x = 0.5) +
       labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
                            ifelse(input$outcome == 1, "Cases", "Deaths")),
            caption =  paste("Authors: Benjamin Wissel, PJ Van Camp\nData from The New York Times, ",
