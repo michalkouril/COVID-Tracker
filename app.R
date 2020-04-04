@@ -62,7 +62,7 @@ labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 
 
 # Define UI for application
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
-                 "COVID-19 Tracker", id="nav",
+                 "COVID-19 Watcher", id="nav",
 
         tabPanel("Plots",
                sidebarLayout(  
@@ -95,23 +95,23 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    tags$h4("Last update"), 
                    textOutput("updateTime"), 'Data updated daily.',
                    tags$br(),tags$br(),tags$h4("Summary"),
-                   'This tool allows users to view COVID-19 cases and deaths across U.S. cities.',
-                   tags$br(),tags$br(),tags$h4("Code"),
-                   "Will release on GitHub soon.",
+                   "This tool allows users to view COVID-19 cases and deaths across U.S. cities. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
+                   "As the coronavirus continues to spread throughout the U.S., people from across the country are using the dashboard to understand how the virus is directly impacting their communities. Users can compare cities to watch the effects of shelter-in-place orders and gain insights on what may come next.",
                    tags$br(),tags$br(),tags$h4("Sources"),
-                   tags$b("COVID-19 cases: "), tags$a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times'), ", based on reports from state and local health agencies.", 
+                   tags$b("COVID-19 cases: "), p(HTML(paste0('This is my ',a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times,')))), "based on reports from state and local health agencies.", 
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), tags$a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget'), ".", 
                    tags$br(),tags$b("Population estimates: "), tags$a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau'), ".", 
                    tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch'),' and', tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker'),', respectively.',
                    tags$br(),tags$br(),tags$h4("Authors"),
-                   "Benjamin Wissel, Department of Biomedical Informatics, Cincinnati Children's Hospital Medical Center", tags$br(), "Dr. PJ Van Camp, Department of Biomedical Informatics, Cincinnati Children's Hospital Medical Center",
+                   "Benjamin Wissel, BS, and Pieter Jan (PJ) Van Camp, MD", tags$br(),tags$br(), "Department of Biomedical Informatics, University of Cincinnati College of Medicine", tags$br(), 
+                   "Division of Biomedical Informatics, Cincinnati Children's Hospital Medical Center",
                    tags$br(),tags$br(),tags$h4("Contact"),
                    "benjamin.wissel@cchmc.org",tags$br(),
                    tags$a(href="https://twitter.com/BDWissel", "@bdwissel"), tags$br(), tags$br(),
                    "vancampn@mail.uc.edu",tags$br(),
                    tags$a(href="https://www.linkedin.com/in/pjvancamp/", "LinkedIn"),
-                   tags$br(),tags$br(),tags$h4("Acknowledgements"),
-                   'Thank you to', tags$a(href='https://www.cincinnatichildrens.org/bio/w/danny-wu','Dr. Danny Wu'), 'and ', tags$a(href='https://scholar.google.com/citations?user=NmQIjpAAAAAJ&hl=en','Sander Su'), 'for hosting this website on their server.',tags$br()
+                   tags$br(),tags$br(),tags$h4("Code"),
+                   "Will release on GitHub soon.",tags$br()
                  )
         )
 )
