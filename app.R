@@ -134,33 +134,17 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    'Thank you to', tags$a(href='https://www.cincinnatichildrens.org/bio/w/danny-wu','Dr. Danny Wu'), 'and ', tags$a(href='https://scholar.google.com/citations?user=NmQIjpAAAAAJ&hl=en','Sander Su'), 'for hosting this website on their server.',tags$br()
                  )
         ),
-        br(),  br(),
-        footer = div(referenceUs, style = "text-align:center; vertical-align:middle;
-            background-color:#d7e0df;padding:5px", width = "100%")
+        br()
+        # footer = div(referenceUs, style = "text-align:center; vertical-align:middle;
+        #     background-color:#d7e0df;padding:5px", width = "100%")
 )
 # Define server logic
 server <- function(input, output, session) {
   
-  #USE THIS DURING TESTING
-  covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F)
-    #Add the special cases
-    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
-    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-
-    data = data %>%
-      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-             date = as.Date(date)) %>% select(-county, - state)
-    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
-    data[data$county == "Kansas City", "fips"] = "00001"
-    updateTime(as.character(max(data$date, na.rm = T)))
-
-    data
-  })
-  
-  # # USE THIS ONLINE
+  # #USE THIS DURING TESTING
   # covidData = reactive({
-  #   data = sourceDataNYT()
+  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
+  #   #Add the special cases
   #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
   #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
   # 
@@ -174,6 +158,22 @@ server <- function(input, output, session) {
   #   data
   # })
   
+  # USE THIS ONLINE
+  covidData = reactive({
+    data = sourceDataNYT()
+    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+
+    data = data %>%
+      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+             date = as.Date(date)) %>% select(-county, - state)
+    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+    data[data$county == "Kansas City", "fips"] = "00001"
+    updateTime(as.character(max(data$date, na.rm = T)))
+
+    data
+  })
+
   updateTime = reactiveVal('April 3, 09:30 AM EST.')
   filterWarning = reactiveVal("")
   regionTest = reactiveVal("")
@@ -190,7 +190,6 @@ server <- function(input, output, session) {
                         selected = "CA: Orange County")
     }
   })
-  
 
   #Calculate the data to be displayed
    plot.data = reactive({
