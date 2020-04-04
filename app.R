@@ -76,13 +76,16 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                 sidebarPanel(
                   radioButtons("regionType", "Region", 
                                list("Counties" = "stateCounty", "Metro areas" = "CSA.Title", 
-                                    "State" = "State.Name", "Country" = "Country"), inline = T),
-                   selectInput(inputId = "region",
-                              label = "Select one or more regions",
-                              choices = "",
-                              multiple = T, 
-                              selectize = T,
-                              width = "400px"
+                                    "States" = "State.Name", "Whole USA" = "Country"), inline = T),
+                  conditionalPanel(
+                     condition = "input.regionType != 'Country'", 
+                     selectInput(inputId = "region",
+                                label = "Select one or more regions",
+                                choices = "",
+                                multiple = T, 
+                                selectize = T,
+                                width = "400px"
+                   )
                   ),
                   conditionalPanel(
                     condition = "input.regionType == 'CSA.Title'", 
@@ -345,8 +348,14 @@ server <- function(input, output, session) {
       geom_text(data = plot.data() %>% filter(date == last(date)), 
                 aes(label = if(input$relPop == 2){ y}else{ sprintf("%.2f", y)}, 
                     x = x, y = y), size = 6, check_overlap = T,hjust=0, vjust=0.5) +
-      labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
-                           ifelse(input$outcome == 1, "Cases", "Deaths")),
+      labs(title = sprintf('COVID-19 %s in %s', 
+                           ifelse(input$outcome == 1, "Cases", "Deaths"),
+                           case_when(
+                             input$regionType == "CSA.Title" ~ "U.S. Metropolitan Areas",
+                             input$regionType == "stateCounty" ~ "U.S. Counties",
+                             input$regionType == "State.Name" ~ "U.S. States",
+                             T ~ "the USA"
+                           )),
            subtitle = ifelse(input$yScale == 1, "Data shown for last 3 weeks", ""))  +
       xlab(xLabel) + ylab(yLabel) +
       coord_cartesian(clip = 'off') +
