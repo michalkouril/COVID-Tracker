@@ -78,18 +78,15 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                list("Counties" = "stateCounty", "Metro areas" = "CSA.Title", 
                                     "States" = "State.Name", "Whole USA" = "Country"), inline = T),
                   conditionalPanel(
-                     condition = "input.regionType != 'Country'", 
+                    condition = "input.regionType != 'Country'", 
                      selectInput(inputId = "region",
                                 label = "Select one or more regions",
                                 choices = "",
                                 multiple = T, 
                                 selectize = T,
                                 width = "400px"
-                   )
-                  ),
-                  conditionalPanel(
-                    condition = "input.regionType == 'CSA.Title'", 
-                    helpText('Tip: type the city name for easy searching.'),hr()
+                    ),
+                    helpText('Tip: type the name for easy searching'),hr()
                   ),
                   radioButtons("outcome", "Data", list("Confirmed cases" = 1, "Deaths" = 2), inline = T),
                   radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
@@ -345,9 +342,12 @@ server <- function(input, output, session) {
                     ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
     
     plot + theme_bw() +
+      #Add the latest counts at the end of the curve
       geom_text(data = plot.data() %>% filter(date == last(date)), 
-                aes(label = if(input$relPop == 2){ y}else{ sprintf("%.2f", y)}, 
+                aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
+                  {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
                     x = x, y = y), size = 6, check_overlap = T,hjust=0, vjust=0.5) +
+      #Update the labs based on the filters
       labs(title = sprintf('COVID-19 %s in %s', 
                            ifelse(input$outcome == 1, "Cases", "Deaths"),
                            case_when(
@@ -358,7 +358,7 @@ server <- function(input, output, session) {
                            )),
            subtitle = ifelse(input$yScale == 1, "Data shown for last 3 weeks", ""))  +
       xlab(xLabel) + ylab(yLabel) +
-      coord_cartesian(clip = 'off') +
+      coord_cartesian(clip = 'off') + #prevent clipping off labels
       theme(plot.title = element_text(hjust = 0.5),
             plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),
             legend.position = 'right', legend.direction = "vertical", 
@@ -367,6 +367,7 @@ server <- function(input, output, session) {
             plot.caption = element_text(hjust = 0.0),
             axis.line = element_line(colour = "black"),
             text = element_text(size=20)) +
+      #Set the icons of the legend (looked weird)
       guides(colour = guide_legend(override.aes = list(size=1.5, shape=95)))
   }) 
    
