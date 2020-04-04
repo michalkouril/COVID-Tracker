@@ -43,7 +43,7 @@ fipsData = rbind(fipsData,
       list("35620", "35614", "408", "New York City", 
            "Metropolitan Statistical Area", NA, "New York-Newark, NY-NJ-CT-PA", 
            "Bronx-Kings-New York-Queens-Richmont", "New York", "36", 
-           "000", "Central", "00000", "Bronx-Kings-New York-Queens-Richmont", "NY", 8336817))
+           "000", "Central", "00000", "Bronx-Kings-New York\nQueens-Richmont", "NY", 8336817))
 
 #Manually add Kansas City
 fipsData = rbind(fipsData, 
@@ -54,7 +54,7 @@ fipsData = rbind(fipsData,
 
 
 #Edit Chicago
-fipsData[fipsData$FIPS == "17031", "County"] = "Cook-DuPage-Grundy-McHenry-Will-DeKalb-Kane-Kendall-Jasper-Lake-Newton-Porter-Lake-Kenosha"
+fipsData[fipsData$FIPS == "17031", "County"] = "Cook-DuPage-Grundy-McHenry\nWill-DeKalb-Kane-Kendall\nJasper-Lake-Newton\nPorter-Lake-Kenosha"
 fipsData[fipsData$FIPS == "17031", "POPESTIMATE2019"] = 9458539
 
 

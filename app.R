@@ -16,7 +16,7 @@ Sys.setenv(TZ='America/New_York')
 
 ## Load in the data
 fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
-  mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019))
+  mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019), Country = "USA") 
 
 #Merge the state and county for search of county
 fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
@@ -29,8 +29,10 @@ sourceDataNYT <- reactiveFileReader(
   read.csv, stringsAsFactors=FALSE
 )
 
-#Set some parameters
-popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019))
+#Set some data
+popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByState = fipsData %>% group_by(State.Name) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
 popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
 
 
@@ -72,17 +74,19 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
         tabPanel("Plots",
                sidebarLayout(  
                 sidebarPanel(
-                  radioButtons("regionType", "Region detail", list("Metro areas" = "CSA.Title", "Counties" = "stateCounty"), inline = T),
-                   selectInput(inputId = "region",
-                              label = "Select one or more regions",
-                              choices = "",
-                              multiple = T, 
-                              selectize = T,
-                              width = "400px"
-                  ),
+                  radioButtons("regionType", "Region", 
+                               list("Counties" = "stateCounty", "Metro areas" = "CSA.Title", 
+                                    "States" = "State.Name", "Whole USA" = "Country"), inline = T),
                   conditionalPanel(
-                    condition = "input.regionType == 'CSA.Title'", 
-                    helpText('Tip: type the city name for easy searching.'),hr()
+                    condition = "input.regionType != 'Country'", 
+                     selectInput(inputId = "region",
+                                label = "Select one or more regions",
+                                choices = "",
+                                multiple = T, 
+                                selectize = T,
+                                width = "400px"
+                    ),
+                    helpText('Tip: type the name for easy searching'),hr()
                   ),
                   radioButtons("outcome", "Data", list("Confirmed cases" = 1, "Deaths" = 2), inline = T),
                   radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
@@ -141,26 +145,10 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
-  # #USE THIS DURING TESTING
-  # covidData = reactive({
-  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
-  #   #Add the special cases
-  #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
-  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-  # 
-  #   data = data %>%
-  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-  #            date = as.Date(date)) %>% select(-county, - state)
-  #   data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
-  #   data[data$county == "Kansas City", "fips"] = "00001"
-  #   updateTime(as.character(max(data$date, na.rm = T)))
-  # 
-  #   data
-  # })
-  
-  # USE THIS ONLINE
+  #USE THIS DURING TESTING
   covidData = reactive({
-    data = sourceDataNYT()
+    data = read.csv("us-counties.csv", stringsAsFactors = F)
+    #Add the special cases
     data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
     data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
 
@@ -173,8 +161,24 @@ server <- function(input, output, session) {
 
     data
   })
+  
+  # # USE THIS ONLINE
+  # covidData = reactive({
+  #   data = sourceDataNYT()
+  #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+  # 
+  #   data = data %>%
+  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+  #            date = as.Date(date)) %>% select(-county, - state)
+  #   data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+  #   data[data$county == "Kansas City", "fips"] = "00001"
+  #   updateTime(as.character(max(data$date, na.rm = T)))
+  # 
+  #   data
+  # })
 
-  updateTime = reactiveVal('April 3, 09:30 AM EST.')
+  updateTime = reactiveVal('2020-04-04 11:33:06 EDT') # Sys.time()
   filterWarning = reactiveVal("")
   regionTest = reactiveVal("")
   
@@ -185,9 +189,15 @@ server <- function(input, output, session) {
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
                         selected = c("Seattle-Tacoma, WA"))
-    } else {
+    } else if(isolate(input$regionType) == "stateCounty") {
       updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
                         selected = "CA: Orange County")
+    } else if(isolate(input$regionType) == "State.Name") {
+      updateSelectInput(session, "region", "Select one or more states", choices = sort(unique(fipsData$State.Name)),
+                        selected = "California")
+    } else {
+      updateSelectInput(session, "region", "Select one or more countries", choices = sort(unique(fipsData$Country)),
+                        selected = "USA")
     }
   })
 
@@ -221,9 +231,15 @@ server <- function(input, output, session) {
      if(isolate(input$regionType) == "CSA.Title"){
        plotData = plotData %>% 
          left_join(popByMetro, by = c("region" = "CSA.Title")) 
-     } else {
+     } else if(isolate(input$regionType) == "stateCounty"){
        plotData = plotData %>% 
          left_join(popByCounty, by = c("region" = "stateCounty"))
+     } else if(isolate(input$regionType) == "State.Name"){
+       plotData = plotData %>% 
+         left_join(popByState, by = c("region" = "State.Name"))
+     } else {
+       plotData = plotData %>% 
+         left_join(popByCountry, by = c("region" = "Country"))
      }
      
      plotData = plotData %>% ungroup() %>% 
@@ -312,6 +328,8 @@ server <- function(input, output, session) {
         annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "Double every\n3 days", color = "#8D8B8B") + 
         scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
       
+    } else {
+      plot = plot + scale_y_continuous(labels = comma)
     }
     
     #Labels depend on selections
@@ -324,14 +342,23 @@ server <- function(input, output, session) {
                     ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
     
     plot + theme_bw() +
+      #Add the latest counts at the end of the curve
       geom_text(data = plot.data() %>% filter(date == last(date)), 
-                aes(label = if(input$relPop == 2){ y}else{ sprintf("%.2f", y)}, 
+                aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
+                  {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
                     x = x, y = y), size = 6, check_overlap = T,hjust=0, vjust=0.5) +
-      labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
-                           ifelse(input$outcome == 1, "Cases", "Deaths")),
+      #Update the labs based on the filters
+      labs(title = sprintf('COVID-19 %s in %s', 
+                           ifelse(input$outcome == 1, "Cases", "Deaths"),
+                           case_when(
+                             input$regionType == "CSA.Title" ~ "U.S. Metropolitan Areas",
+                             input$regionType == "stateCounty" ~ "U.S. Counties",
+                             input$regionType == "State.Name" ~ "U.S. States",
+                             T ~ "the USA"
+                           )),
            subtitle = ifelse(input$yScale == 1, "Data shown for last 3 weeks", ""))  +
       xlab(xLabel) + ylab(yLabel) +
-      coord_cartesian(clip = 'off') +
+      coord_cartesian(clip = 'off') + #prevent clipping off labels
       theme(plot.title = element_text(hjust = 0.5),
             plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),
             legend.position = 'right', legend.direction = "vertical", 
@@ -339,7 +366,9 @@ server <- function(input, output, session) {
             panel.border = element_blank(),
             plot.caption = element_text(hjust = 0.0),
             axis.line = element_line(colour = "black"),
-            text = element_text(size=20))
+            text = element_text(size=20)) +
+      #Set the icons of the legend (looked weird)
+      guides(colour = guide_legend(override.aes = list(size=1.5, shape=95)))
   }) 
    
   # ---- Render the plot ----
