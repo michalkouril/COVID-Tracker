@@ -142,10 +142,26 @@ server <- function(input, output, session) {
   #   For details, visit the <a href='https://github.com/nytimes/covid-19-data'>New York Times GitHub</a>"
   # )))
   
-  #USE THIS DURING TESTING
+  # #USE THIS DURING TESTING
+  # covidData = reactive({
+  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
+  #   #Add the special cases
+  #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+  # 
+  #   data = data %>%
+  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+  #            date = as.Date(date)) %>% select(-county, - state)
+  #   data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+  #   data[data$county == "Kansas City", "fips"] = "00001"
+  #   updateTime(as.character(max(data$date, na.rm = T)))
+  # 
+  #   data
+  # })
+  
+  # USE THIS ONLINE
   covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F)
-    #Add the special cases
+    data = sourceDataNYT()
     data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
     data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
 
@@ -158,22 +174,6 @@ server <- function(input, output, session) {
 
     data
   })
-  
-  # # USE THIS ONLINE
-  # covidData = reactive({
-  #   data = sourceDataNYT()
-  #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
-  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-  #   
-  #   data = data %>%
-  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-  #            date = as.Date(date)) %>% select(-county, - state)
-  #   data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
-  #   data[data$county == "Kansas City", "fips"] = "00001"
-  #   updateTime(as.character(max(data$date, na.rm = T)))
-  #   
-  #   data
-  # })
   
   updateTime = reactiveVal('April 3, 09:30 AM EST.')
   filterWarning = reactiveVal("")
