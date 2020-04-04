@@ -328,6 +328,8 @@ server <- function(input, output, session) {
         annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "Double every\n3 days", color = "#8D8B8B") + 
         scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
       
+    } else {
+      plot = plot + scale_y_continuous(labels = comma)
     }
     
     #Labels depend on selections
@@ -355,7 +357,8 @@ server <- function(input, output, session) {
             panel.border = element_blank(),
             plot.caption = element_text(hjust = 0.0),
             axis.line = element_line(colour = "black"),
-            text = element_text(size=20))
+            text = element_text(size=20)) +
+      guides(colour = guide_legend(override.aes = list(size=1.5, shape=95)))
   }) 
    
   # ---- Render the plot ----
