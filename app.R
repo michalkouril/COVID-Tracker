@@ -65,11 +65,11 @@ labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 
 
 referenceUs = paste("Authors: Benjamin Wissel, PJ Van Camp\nData from The New York Times, ",
                     "based on reports from state and local health agencies.\n",
-                    "http://bit.ly/covid-cities", sep = "")
+                    "https://covid19watcher.com/", sep = "")
 
 # Define UI for application
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
-                 "COVID-19 Tracker", id="nav",
+                 "COVID-19 Watcher", id="nav",
 
         tabPanel("Plots",
                sidebarLayout(  
@@ -383,7 +383,7 @@ server <- function(input, output, session) {
   #*************************
   output$downloadPlot1 <- downloadHandler(
     filename = function() {
-      paste("COVID_Tracker_Plot_", as.integer(Sys.time()), ".png", sep="")
+      paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
     },
     content = function(file) {
       myPlot = plot1() +
