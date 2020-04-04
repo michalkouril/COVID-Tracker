@@ -18,7 +18,7 @@ fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "charact
   mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019))
 
 #Merge the state and county for search of county
-fipsData$stateCounty = paste0(fipsData$State.Name, ": ", fipsData$County)
+fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
 
 #Link to the NYTimes data on GitHub
 sourceDataNYT <- reactiveFileReader(
@@ -187,7 +187,7 @@ server <- function(input, output, session) {
                         selected = c("Seattle-Tacoma, WA"))
     } else {
       updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
-                        selected = "Ohio: Hamilton County")
+                        selected = "OH: Hamilton County")
     }
   })
   
@@ -227,8 +227,8 @@ server <- function(input, output, session) {
          left_join(popByCounty, by = c("region" = "stateCounty"))
      }
      
-     plotData = plotData %>%
-       mutate(x = date, y = !!outcome) %>% #add the population per region
+     plotData = plotData %>% ungroup() %>% 
+       mutate(x = date, y = !!outcome, region = str_trunc(region, 20)) %>% #add the population per region
        filter(y > 0) #Only show cases / deaths more than 0
      
      if(max(plotData$y) < startCases){
@@ -264,7 +264,7 @@ server <- function(input, output, session) {
      myOrder = plotData %>% group_by(region) %>% summarise(y = max(y)) %>% arrange(desc(y))
      plotData$region = factor(plotData$region, levels = c(myOrder$region))
      
-     plotData
+     plotData %>% ungroup()
      
   })
    

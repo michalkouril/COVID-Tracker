@@ -3,10 +3,14 @@
 #************************
 library(openxlsx)
 library(dplyr)
+library(tigris)
+
 
 #Load the region data and add the full FIPS
 fipsData = read.xlsx("metro_fips_codes.xlsx") %>% 
-  mutate(FIPS = paste0(FIPS.State.Code, FIPS.County.Code), County = `County/County.Equivalent`)
+  mutate(FIPS = paste0(FIPS.State.Code, FIPS.County.Code), County = `County/County.Equivalent`) %>% 
+  left_join(fips_codes %>% mutate(fips = paste0(state_code, county_code)) %>% 
+              select(fips, State = state), by = c("FIPS" = "fips"))
   
 
 #Get population data
@@ -39,14 +43,14 @@ fipsData = rbind(fipsData,
       list("35620", "35614", "408", "New York City", 
            "Metropolitan Statistical Area", NA, "New York-Newark, NY-NJ-CT-PA", 
            "Bronx-Kings-New York-Queens-Richmont", "New York", "36", 
-           "000", "Central", "00000", "Bronx-Kings-New York-Queens-Richmont", 8336817))
+           "000", "Central", "00000", "Bronx-Kings-New York-Queens-Richmont", "NY", 8336817))
 
 #Manually add Kansas City
 fipsData = rbind(fipsData, 
                  list("28140", NA, "312", "Kansas City", 
                       "Metropolitan Statistical Area", NA, "Kansas City-Overland Park-Kansas City, MO-KS", 
                       "Cass-Clay-Jackson-Platte", "Missouri", "29", 
-                      "000", "Central", "00001", "Cass-Clay-Jackson-Platte", 1163157))
+                      "000", "Central", "00001", "Cass-Clay-Jackson-Platte", "MO", 1163157))
 
 
 #Edit Chicago
