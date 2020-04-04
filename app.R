@@ -118,6 +118,17 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
+  showModal(modalDialog(title = "IMPORTANT NOTE", HTML(
+    "Several areas are not grouped by county or metropolitan area,
+    although you can still search for them:<ul><li><b>New York City</b>: The five boroughs of New York City
+    (New York, Kings, Queens, Bronx and Richmond counties) are assigned to a single area called New York City
+    </li><li><b>Kansas City</b>: Four counties (Cass, Clay, Jackson and Platte) overlap the municipality
+    of Kansas City, Mo. The cases and deaths that we show for these four counties are only for the portions
+    exclusive of Kansas City. Cases and deaths for Kansas City are reported as their own line</li>
+    <li><b>Chicago</b>: All cases and deaths for Chicago are reported as part of Cook County</li></ul>
+    For details, visit the <a href='https://github.com/nytimes/covid-19-data'>New York Times GitHub</a>"
+  )))
+  
   #USE THIS DURING TESTING
   covidData = reactive({
     data = read.csv("us-counties.csv", stringsAsFactors = F) 
@@ -146,6 +157,7 @@ server <- function(input, output, session) {
   
   updateTime = reactiveVal('April 3, 09:30 AM EST.')
   filterWarning = reactiveVal("")
+  regionTest = reactiveVal("")
   
   #Update the time on the page
   output$updateTime = renderText(updateTime())
@@ -153,23 +165,25 @@ server <- function(input, output, session) {
   observeEvent(input$regionType, {
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
-                        selected = c("Seattle-Tacoma, WA","Boston-Worcester-Providence, MA-RI-NH-CT","San Jose-San Francisco-Oakland, CA"))
+                        selected = c("Seattle-Tacoma, WA"))
     } else {
       updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
-                        selected = "New York - New York County")
+                        selected = "Ohio - Hamilton County")
     }
   })
   
+
   #Calculate the data to be displayed
    plot.data = reactive({
 
      #Make sure the plot only gets generated if there is at least one region selected
+     # Also don't update during change of regionType
      req(!is.null(input$region))
      
      startCases = ifelse(input$outcome == 1, 10, 1)
 
      #This will be used later when we can select different region levels (e.g. county, state, ...)
-     groupByRegion = sym(input$regionType)
+     groupByRegion = sym(isolate(input$regionType))
      outcome = sym(ifelse(input$outcome == 1, "cases", "deaths"))
      
      #If working by date, crop the data
