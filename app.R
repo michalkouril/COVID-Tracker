@@ -8,6 +8,7 @@ if(!require(shinyWidgets)) install.packages("shinyWidgets", repos = "http://cran
 if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://cran.us.r-project.org")
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
+if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -187,7 +188,7 @@ server <- function(input, output, session) {
                         selected = c("Seattle-Tacoma, WA"))
     } else {
       updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
-                        selected = "OH: Hamilton County")
+                        selected = "CA: Orange County")
     }
   })
   
@@ -228,7 +229,7 @@ server <- function(input, output, session) {
      }
      
      plotData = plotData %>% ungroup() %>% 
-       mutate(x = date, y = !!outcome, region = str_trunc(region, 20)) %>% #add the population per region
+       mutate(x = date, y = !!outcome) %>% #add the population per region
        filter(y > 0) #Only show cases / deaths more than 0
      
      if(max(plotData$y) < startCases){
@@ -240,15 +241,16 @@ server <- function(input, output, session) {
      omitted = NULL
      if(input$yScale == 2){
        plotData = plotData %>% 
-
          filter(y >= startCases) %>% group_by(region) %>% #Filter 10+
          mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
-       omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
      }
+     
+     omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
      
      #Update warning if needed
      if(length(omitted) > 0){
-       filterWarning(paste("The following have a total less than", startCases, "cases and were omitted:", 
+       filterWarning(paste("The following have a less than", ifelse(input$yScale == 1, 1, startCases), 
+                           ifelse(input$outcome == 1, "cases", "death"), "and were omitted:", 
                            paste(omitted, collapse = "; "))) #displayed as warning
      } else {
        filterWarning("")
@@ -321,23 +323,30 @@ server <- function(input, output, session) {
                     paste("Number of Days Since",
                           ifelse(input$outcome == 1, "10th Case", "1st Death")))
 
-    yLabel = ifelse(input$relPop == 1 && input$yScale == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", "Deaths per 10,000 Residents"), 
+    yLabel = ifelse(input$relPop == 1 && input$yScale == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", 
+                                                                  "Deaths per 10,000 Residents"), 
                     ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
 
     plot + theme_bw() +
       geom_text(data = plot.data() %>% filter(date == last(date)), 
                 aes(label = if(input$relPop == 2){ y}else{ sprintf("%.2f", y)}, 
-                    x = x, y = y), size = 5, check_overlap = T,  nudge_x = 0.5) +
+                    x = x, y = y), size = 6, check_overlap = T,hjust=0, vjust=0.5) +
       labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
                            ifelse(input$outcome == 1, "Cases", "Deaths")),
+           subtitle = ifelse(input$yScale == 1, "Data shown for last 3 weeks", ""),
            caption =  paste("Authors: Benjamin Wissel, PJ Van Camp\nData from The New York Times, ",
                             "based on reports from state and local health agencies.\n",
                             "http://bit.ly/covid-cities", sep = ""))  +
       xlab(xLabel) + ylab(yLabel) +
-      theme(legend.position = 'right', legend.direction = "vertical", 
+      coord_cartesian(clip = 'off') +
+      scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 20)) +
+      theme(plot.title = element_text(hjust = 0.5),
+            plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),
+            legend.position = 'right', legend.direction = "vertical", 
             legend.title = element_blank(), 
-            plot.caption = element_text(hjust = 0.0), 
-
+            panel.border = element_blank(),
+            plot.caption = element_text(hjust = 0.0),
+            axis.line = element_line(colour = "black"),
             text = element_text(size=20))
     
   })
