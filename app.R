@@ -145,26 +145,10 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # Define server logic
 server <- function(input, output, session) {
   
-  #USE THIS DURING TESTING
-  covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F)
-    #Add the special cases
-    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
-    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-
-    data = data %>%
-      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-             date = as.Date(date)) %>% select(-county, - state)
-    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
-    data[data$county == "Kansas City", "fips"] = "00001"
-    updateTime(as.character(max(data$date, na.rm = T)))
-
-    data
-  })
-  
-  # # USE THIS ONLINE
+  # #USE THIS DURING TESTING
   # covidData = reactive({
-  #   data = sourceDataNYT()
+  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
+  #   #Add the special cases
   #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
   #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
   # 
@@ -177,6 +161,22 @@ server <- function(input, output, session) {
   # 
   #   data
   # })
+  
+  # USE THIS ONLINE
+  covidData = reactive({
+    data = sourceDataNYT()
+    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+
+    data = data %>%
+      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+             date = as.Date(date)) %>% select(-county, - state)
+    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+    data[data$county == "Kansas City", "fips"] = "00001"
+    updateTime(as.character(max(data$date, na.rm = T)))
+
+    data
+  })
 
   updateTime = reactiveVal('2020-04-04 11:33:06 EDT') # Sys.time()
   filterWarning = reactiveVal("")
