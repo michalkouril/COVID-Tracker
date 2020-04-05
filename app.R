@@ -1,4 +1,9 @@
-# load required packages
+#********************************************************
+# ---- COVID 19 WATCHER (Ben Wissel and PJ Van Camp) ----
+#********************************************************
+
+# ---- Packages and general settings ----
+#****************************************
 if(!require(openxlsx)) install.packages("openxlsx", repos = "http://cran.us.r-project.org")
 if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
 if(!require(ggplot2)) install.packages("ggplot2", repos = "http://cran.us.r-project.org")
@@ -14,14 +19,24 @@ if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-proj
 options(scipen=10000)
 Sys.setenv(TZ='America/New_York')
 
-## Load in the data
+
+# ---- Loading initial data----
+#******************************
+
+#FIPS data
 fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
   mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019), Country = "USA") 
 
 #Merge the state and county for search of county
 fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
 
-#Link to the NYTimes data on GitHub
+#Get total population by region
+popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByState = fipsData %>% group_by(State.Name) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
+
+#Reactive link to the NYTimes data on GitHub
 sourceDataNYT <- reactiveFileReader(
   intervalMillis = 3.6e+6, #Check every hour
   session = NULL,
@@ -29,12 +44,9 @@ sourceDataNYT <- reactiveFileReader(
   read.csv, stringsAsFactors=FALSE
 )
 
-#Set some data
-popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByState = fipsData %>% group_by(State.Name) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
 
+# ---- Functions ----
+#********************
 
 #Function used to generate the doubleing rate guide
 doubleRate = function(x, startCases = 10, daysToDouble = 3, population = 10000, perHowMany = 10000) {
@@ -63,15 +75,25 @@ labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 
   return(list(posX = posX, posY= posY))
 }
 
-referenceUs = paste('Authors: Benjamin Wissel and Pieter Jan (PJ) Van Camp, MD\nData from The New York Times, based on reports from state and local health agencies.\nUpdated: ', `attr<-`(Sys.time(),"tzone","America/New_York") %>% format("%B %d, %I:%M %p"), ' EST\nhttps://www.covid19watcher.com', sep = '')
+#Function to detect if a mobile device is used (for plot size)
+mobileDetect <- function(inputId, value = 0) {
+  tagList(
+    singleton(tags$head(tags$script(src = "js/mobile.js"))),
+    tags$input(id = inputId,
+               class = "mobile-element",
+               type = "hidden")
+  )
+}
 
-# Define UI for application
+
+# ---- UI ----
+#**************
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                  "COVID-19 Watcher", id="nav",
-
+        
         tabPanel("Plots",
                sidebarLayout(  
-                sidebarPanel(
+                sidebarPanel(width = 4,
                   radioButtons("regionType", "Region", 
                                list("County" = "stateCounty", "City" = "CSA.Title", 
                                     "State" = "State.Name", "USA" = "Country"), inline = T, selected = "CSA.Title"),
@@ -81,8 +103,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                                 label = "Select one or more regions",
                                 choices = "",
                                 multiple = T, 
-                                selectize = T,
-                                width = "400px"
+                                selectize = T
                     ),
                     helpText('Tip: type the name for easy searching'),hr()
                   ),
@@ -94,10 +115,12 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                   ),
                   tags$br(),
                   downloadButton("downloadPlot1", "Download plot"),
-                  tags$div(textOutput("filterWarnings"), style = "color: red;")
+                  tags$div(textOutput("filterWarnings"), style = "color: red;"),
+                  mobileDetect('isMobile')
+
                 ),
                 mainPanel(
-                  plotOutput(outputId = 'plot1', width = "1000px", height = "600px")
+                  plotOutput(outputId = 'plot1')
                 )
               )
         ),
@@ -135,18 +158,42 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
                    'Thank you to', tags$a(href='https://www.cincinnatichildrens.org/bio/w/danny-wu','Dr. Danny Wu'), 'and ', tags$a(href='https://scholar.google.com/citations?user=NmQIjpAAAAAJ&hl=en','Sander Su'), 'for hosting this website on their server.',tags$br()
                  )
-        ),
-        br()
-        # footer = div(referenceUs, style = "text-align:center; vertical-align:middle;
-        #     background-color:#d7e0df;padding:5px", width = "100%")
+        )
 )
-# Define server logic
+
+
+# ---- SERVER ----
+#*****************
 server <- function(input, output, session) {
   
-  # #USE THIS DURING TESTING
+  referenceUs = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
+                      "Data from The New York Times, based on reports from state and local health agencies.\n",
+                      "Updated: ", input$clientTime, "\nhttps://www.covid19watcher.com", sep = ""))
+  
+  output$isItMobile <- renderText({
+    ifelse(input$isMobile, "You are on a mobile device", "You are not on a mobile device")
+  })
+  
+  #USE THIS DURING TESTING
+  covidData = reactive({
+    data = read.csv("us-counties.csv", stringsAsFactors = F)
+    #Add the special cases
+    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+
+    data = data %>%
+      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+             date = as.Date(date)) %>% select(-county, - state)
+    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+    data[data$county == "Kansas City", "fips"] = "00001"
+    updateTime(as.character(max(data$date, na.rm = T) %>% format('%B %d, %Y')))
+
+    data
+  })
+  
+  # # USE THIS ONLINE
   # covidData = reactive({
-  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
-  #   #Add the special cases
+  #   data = sourceDataNYT()
   #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
   #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
   # 
@@ -159,21 +206,6 @@ server <- function(input, output, session) {
   # 
   #   data
   # })
-  
-  # USE THIS ONLINE
-  covidData = reactive({
-    data = sourceDataNYT()
-    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
-    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-
-    data = data %>%
-      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-             date = as.Date(date)) %>% select(-county, - state)
-    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
-    data[data$county == "Kansas City", "fips"] = "00001"
-    updateTime(as.character(max(data$date, na.rm = T) %>% format('%B %d, %Y')))
-    data
-  })
 
   updateTime = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
@@ -351,7 +383,7 @@ server <- function(input, output, session) {
                              input$regionType == "State.Name" ~ "U.S. States",
                              T ~ "the USA"
                            )),
-           caption = referenceUs)  +
+           caption = isolate(referenceUs()))  +
       xlab(xLabel) + ylab(yLabel) +
       coord_cartesian(clip = 'off') + #prevent clipping off labels
       theme(plot.title = element_text(hjust = 0.0),
@@ -368,10 +400,10 @@ server <- function(input, output, session) {
   # ---- Render the plot ----
   #**************************
   output$plot1 <- renderPlot({
-    
     plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 40)) 
-    
-  })
+     #If mobile, use statix width for plot, else dynamic 
+  }, height = 600, width = function(){ifelse(input$isMobile, 1000, "auto")})
+
   
   # ---- Download plot ----
   #*************************
@@ -381,9 +413,9 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       myPlot = plot1() +
-        labs(caption =  referenceUs)
-
+        labs(caption =  isolate(referenceUs()))
       ggsave(file, myPlot, width = 12, height = 7, device = "png")
+
     }
   )
   
