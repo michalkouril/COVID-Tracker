@@ -75,8 +75,8 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                sidebarLayout(  
                 sidebarPanel(
                   radioButtons("regionType", "Region", 
-                               list("Counties" = "stateCounty", "Metro areas" = "CSA.Title", 
-                                    "States" = "State.Name", "Whole USA" = "Country"), inline = T),
+                               list("County" = "stateCounty", "City" = "CSA.Title", 
+                                    "State" = "State.Name", "USA" = "Country"), inline = T, selected = "CSA.Title"),
                   conditionalPanel(
                     condition = "input.regionType != 'Country'", 
                      selectInput(inputId = "region",
@@ -88,14 +88,14 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                     ),
                     helpText('Tip: type the name for easy searching'),hr()
                   ),
-                  radioButtons("outcome", "Data", list("Confirmed cases" = 1, "Deaths" = 2), inline = T),
+                  radioButtons("outcome", "Data", list("Cases" = 1, "Deaths" = 2), inline = T),
                   radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
                   conditionalPanel(
                     condition = "input.yScale == 1",  
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
-                  downloadButton("downloadPlot1", "Download current plot"),
+                  #downloadButton("downloadPlot1", "Download current plot"),
                   tags$div(textOutput("filterWarnings"), style = "color: red;")
                 ),
                 mainPanel(
@@ -173,12 +173,11 @@ server <- function(input, output, session) {
              date = as.Date(date)) %>% select(-county, - state)
     data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
     data[data$county == "Kansas City", "fips"] = "00001"
-    updateTime(as.character(max(data$date, na.rm = T)))
-
+    updateTime(as.character(max(data$date, na.rm = T) %>% format('%B %d, %Y')))
     data
   })
 
-  updateTime = reactiveVal('2020-04-04 11:33:06 EDT') # Sys.time()
+  updateTime = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
   regionTest = reactiveVal("")
   
@@ -188,13 +187,13 @@ server <- function(input, output, session) {
   observeEvent(input$regionType, {
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
-                        selected = c("Seattle-Tacoma, WA"))
+                        selected = c("New Orleans-Metairie-Hammond, LA-MS", "San Jose-San Francisco-Oakland, CA"))
     } else if(isolate(input$regionType) == "stateCounty") {
       updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
                         selected = "CA: Orange County")
     } else if(isolate(input$regionType) == "State.Name") {
       updateSelectInput(session, "region", "Select one or more states", choices = sort(unique(fipsData$State.Name)),
-                        selected = "California")
+                        selected = "Missouri")
     } else {
       updateSelectInput(session, "region", "Select one or more countries", choices = sort(unique(fipsData$Country)),
                         selected = "USA")
@@ -270,7 +269,7 @@ server <- function(input, output, session) {
        filterWarning("")
      }
      
-     #When cases per 10,000
+     #When normalizing cases or deaths per 10,000 residents
      if(input$relPop == 1 && input$yScale == 1){
        plotData = plotData %>% 
          mutate(y = y / (population / 10000))
@@ -304,28 +303,26 @@ server <- function(input, output, session) {
       #Generate the doubline time using the doubleRate function (see at top)
       if(input$yScale == 2){
         plot = plot + 
+          stat_function(fun = ~log10(doubleRate(.x, startCases, 1, pop)),
+                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
           stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
           stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
-                        
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
-        
-        twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
-        threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
-      } else {
-        plot = plot + 
-          stat_function(fun = ~doubleRate(.x, startCases, 2, pop),
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~doubleRate(.x, startCases, 3, pop),
+          stat_function(fun = ~log10(doubleRate(.x, startCases, 7, pop)),
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
-        
+          
+        oneDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 1, startCases = startCases)
         twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
         threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
+        sevenDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 7, startCases = startCases)
       }
       
       plot = plot +
-        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "Double every\n2 days", color = "#8D8B8B") +
-        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "Double every\n3 days", color = "#8D8B8B") + 
+        annotate("text", x = oneDayLabel$posX, y = oneDayLabel$posY, label = "Doubles every day", color = "#8D8B8B") +
+        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
+        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
+        annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
         scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
       
     } else {
@@ -346,7 +343,7 @@ server <- function(input, output, session) {
       geom_text(data = plot.data() %>% filter(date == last(date)), 
                 aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
                   {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
-                    x = x, y = y), size = 6, check_overlap = T,hjust=0, vjust=0.5) +
+                    x = x, y = y), size = 4, check_overlap = T,hjust=0, vjust=0.5) +
       #Update the labs based on the filters
       labs(title = sprintf('COVID-19 %s in %s', 
                            ifelse(input$outcome == 1, "Cases", "Deaths"),
@@ -356,15 +353,14 @@ server <- function(input, output, session) {
                              input$regionType == "State.Name" ~ "U.S. States",
                              T ~ "the USA"
                            )),
-           subtitle = ifelse(input$yScale == 1, "Data shown for last 3 weeks", ""))  +
+           caption = paste('Authors: Benjamin Wissel and Pieter Jan (PJ) Van Camp, MD\nData from The New York Times, based on reports from state and local health agencies.\nUpdated: ', `attr<-`(Sys.time(),"tzone","America/New_York") %>% format("%B %d, %I:%M %p"), '\nhttps://www.covid19watcher.com', sep = ''))  +
       xlab(xLabel) + ylab(yLabel) +
       coord_cartesian(clip = 'off') + #prevent clipping off labels
-      theme(plot.title = element_text(hjust = 0.5),
-            plot.subtitle = element_text(hjust = 0.5, size = 16, face = "italic"),
+      theme(plot.title = element_text(hjust = 0.0),
             legend.position = 'right', legend.direction = "vertical", 
             legend.title = element_blank(), 
             panel.border = element_blank(),
-            plot.caption = element_text(hjust = 0.0),
+            plot.caption = element_text(hjust = 0.0, size = 14),
             axis.line = element_line(colour = "black"),
             text = element_text(size=20)) +
       #Set the icons of the legend (looked weird)
@@ -375,24 +371,24 @@ server <- function(input, output, session) {
   #**************************
   output$plot1 <- renderPlot({
     
-    plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 20)) 
+    plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 40)) 
     
   })
   
   # ---- Download plot ----
   #*************************
-  output$downloadPlot1 <- downloadHandler(
-    filename = function() {
-      paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
-    },
-    content = function(file) {
-      myPlot = plot1() +
-        labs(subtitle = paste("Data for three weeks prior to", format(Sys.Date(), format = "%d %b %Y")),
-             caption =  referenceUs)
-        
-      ggsave(file, myPlot, width = 16, height = 7, device = "png")
-    }
-  )
+  # output$downloadPlot1 <- downloadHandler(
+  #   filename = function() {
+  #     paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
+  #   },
+  #   content = function(file) {
+  #     myPlot = plot1() +
+  #       labs(subtitle = paste("Data for three weeks prior to", format(Sys.Date(), format = "%d %b %Y")),
+  #            caption =  referenceUs)
+  #       
+  #     ggsave(file, myPlot, width = 16, height = 7, device = "png")
+  #   }
+  # )
   
   # ---- Warning message ----
   #***************************
