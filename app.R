@@ -114,7 +114,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
-                  downloadButton("downloadPlot1", "Download current plot"),
+                  downloadButton("downloadPlot1", "Download plot"),
                   tags$div(textOutput("filterWarnings"), style = "color: red;"),
                   mobileDetect('isMobile')
 
@@ -166,10 +166,9 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 #*****************
 server <- function(input, output, session) {
   
-  referenceUs = paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
+  referenceUs = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
-                      "Updated: ", `attr<-`(Sys.time(),"tzone","America/New_York") %>% 
-                        format("%B %d, %I:%M %p"), "EST\nhttps://www.covid19watcher.com", sep = "")
+                      "Updated: ", input$clientTime, "\nhttps://www.covid19watcher.com", sep = ""))
   
   output$isItMobile <- renderText({
     ifelse(input$isMobile, "You are on a mobile device", "You are not on a mobile device")
@@ -384,7 +383,7 @@ server <- function(input, output, session) {
                              input$regionType == "State.Name" ~ "U.S. States",
                              T ~ "the USA"
                            )),
-           caption = referenceUs)  +
+           caption = isolate(referenceUs()))  +
       xlab(xLabel) + ylab(yLabel) +
       coord_cartesian(clip = 'off') + #prevent clipping off labels
       theme(plot.title = element_text(hjust = 0.0),
@@ -414,11 +413,8 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       myPlot = plot1() +
-        labs(subtitle = paste("Data for three weeks prior to", format(Sys.Date(), format = "%d %b %Y")),
-             caption =  referenceUs
-        )
-        
-      ggsave(file, myPlot, width = 16, height = 7, device = "png")
+        labs(caption =  isolate(referenceUs()))
+      ggsave(file, myPlot, width = 12, height = 7, device = "png")
 
     }
   )

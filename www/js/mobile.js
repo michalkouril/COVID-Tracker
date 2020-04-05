@@ -17,3 +17,9 @@ $.extend(isMobileBinding, {
 });
 
 Shiny.inputBindings.register(isMobileBinding);
+
+//User time
+$(document).on('shiny:connected', function(event) {
+  var now = new Date().toLocaleString('en-us', {timeZoneName:'short'});
+  Shiny.setInputValue("clientTime", now);
+});
