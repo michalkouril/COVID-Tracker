@@ -401,7 +401,7 @@ server <- function(input, output, session) {
   # ---- Render the plot ----
   #**************************
   output$plot1 <- renderPlot({
-    plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 20)) 
+    plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 40)) 
      #If mobile, use statix width for plot, else dynamic 
   }, height = 600, width = function(){ifelse(input$isMobile, 1000, "auto")})
 
