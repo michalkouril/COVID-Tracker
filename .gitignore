@@ -3,3 +3,5 @@
 .RData
 .Ruserdata
 leafletTest.R
+shiny-server.conf
+DockerFile

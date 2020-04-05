@@ -90,7 +90,7 @@ mobileDetect <- function(inputId, value = 0) {
 #**************
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                  "COVID-19 Watcher", id="nav",
-        
+
         tabPanel("Plots",
                sidebarLayout(  
                 sidebarPanel(width = 4,
@@ -129,34 +129,38 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    tags$h4("Last update"), 
                    textOutput("updateTime"), 'Data updated daily.',
                    tags$br(),tags$br(),tags$h4("Summary"),
-                   'This tool allows users to view COVID-19 cases and deaths across U.S. cities.',
-                   tags$br(),tags$br(),tags$h4("Code"),
-                   "Will release on GitHub soon.",
+                   "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
+                   "As the coronavirus continues to spread throughout the U.S., thousands of people from across the country have used this dashboard to understand how the virus is impacting their community. Users can compare cities to watch the effects of shelter-in-place orders and gain insights on what may come next.",
                    tags$br(),tags$br(),tags$h4("Sources"),
-                   tags$b("COVID-19 cases: "), tags$a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times'), ", based on reports from state and local health agencies.", 
-                   tags$br(),tags$b("U.S. metropolitan area definitions: "), tags$a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget'), ".", 
-                   tags$br(),tags$b("Population estimates: "), tags$a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau'), ".", 
-                   tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch'),' and', tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker'),', respectively.',
-                   tags$br(),tags$br(),
-                   HTML("<i>Note on data</i><br>
-                        Several areas are not grouped by county or metropolitan area,
-                        although you can still search for them:<ul><li><b>New York City</b>: The five boroughs of New York City
-                        (New York, Kings, Queens, Bronx and Richmond counties) are assigned to a single area called New York City
-                        </li><li><b>Kansas City</b>: Four counties (Cass, Clay, Jackson and Platte) overlap the municipality
-                        of Kansas City, Mo. The cases and deaths that we show for these four counties are only for the portions
-                        exclusive of Kansas City. Cases and deaths for Kansas City are reported as their own line</li>
-                        <li><b>Chicago</b>: All cases and deaths for Chicago are reported as part of Cook County</li></ul>
-                        For details, visit the <a href='https://github.com/nytimes/covid-19-data'>New York Times GitHub</a>"
-                   ),
+                   tags$b("COVID-19 cases and deaths: "), HTML(paste0(a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times', target="_blank"), ", based on reports from state and local health agencies.", sep = '')), 
+                   tags$br(),tags$b("U.S. metropolitan area definitions: "), HTML(paste0(a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget', target="_blank"), ".", sep = '')),
+                   tags$br(),tags$b("Population estimates: "), HTML(paste0(a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau', target="_blank"), ".", sep = '')),
+                   tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', 
+                   tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and', 
+                   tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker', target="_blank"),', respectively.',
+                   tags$br(),tags$br(),tags$h4("Code"),
+                   HTML(paste0("This is an open-source tool and suggestions for improvement are welcomed. Those interested in contributing to this site can access the code on ", 
+                               a(href='https://github.com/wisselbd/COVID-Tracker','GitHub', target="_blank"), ". Major contributions will be acknowledged.", sep = '')),
                    tags$br(),tags$br(),tags$h4("Authors"),
-                   "Benjamin Wissel, Department of Biomedical Informatics, Cincinnati Children's Hospital Medical Center", tags$br(), "Dr. PJ Van Camp, Department of Biomedical Informatics, Cincinnati Children's Hospital Medical Center",
+                   HTML(paste0("Benjamin Wissel, BS<sup>1,2</sup>, and PJ Van Camp, MD<sup>1,2</sup>", sep = "")), tags$br(),tags$br(), 
+                   HTML(paste0("<sup>1</sup>Department of Biomedical Informatics, University of Cincinnati College of Medicine", sep = "")), tags$br(), 
+                   HTML(paste0("<sup>2</sup>Division of Biomedical Informatics, Cincinnati Children's Hospital Medical Center", sep = "")),
                    tags$br(),tags$br(),tags$h4("Contact"),
-                   "benjamin.wissel@cchmc.org",tags$br(),
-                   tags$a(href="https://twitter.com/BDWissel", "@bdwissel"), tags$br(), tags$br(),
-                   "vancampn@mail.uc.edu",tags$br(),
-                   tags$a(href="https://www.linkedin.com/in/pjvancamp/", "LinkedIn"),
+                   #PJ: Can you make this email address a hyperlink that pulls up an email?
+                   HTML('<b>Benjamin Wissel</b><br>Email: <a href="mailto:benjamin.wissel@cchmc.org?Subject=About%20COVID19%20WATCHER" target="_top">benjamin.wissel@cchmc.org</a>'),
+                   tags$br(),
+                   "Twitter: ", tags$a(href="https://twitter.com/BDWissel", "@bdwissel", target="_blank"),
+                   HTML("<br><br><b>PJ Van Camp</b><br>LinkedIn: <a href='https://www.linkedin.com/in/pjvancamp/'>pjvancamp</a>"),
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
-                   'Thank you to', tags$a(href='https://www.cincinnatichildrens.org/bio/w/danny-wu','Dr. Danny Wu'), 'and ', tags$a(href='https://scholar.google.com/citations?user=NmQIjpAAAAAJ&hl=en','Sander Su'), 'for hosting this website on their server.',tags$br()
+                   HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Chad Weis and ", 
+                    a(href="https://www.cincinnatichildrens.org/bio/k/michal-kouril", "Michal Kouril, PhD", target="_blank"), 
+                    " for their help building the infrastructure for the site. ",
+                    "Thank you to Leighanne Toole for promoting and media relations, and ", 
+                   a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
+                   " and Sander Su for their help lauching the beta version of this site.", sep = "")),
+                   " We have received excellent feedback from the academic community that has improved our presentation of the data, ",
+                   "especially from Samuel Keltner."
+                   
                  )
         )
 )
@@ -168,11 +172,8 @@ server <- function(input, output, session) {
   
   referenceUs = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
-                      "Updated: ", input$clientTime, "\nhttps://www.covid19watcher.com", sep = ""))
-  
-  output$isItMobile <- renderText({
-    ifelse(input$isMobile, "You are on a mobile device", "You are not on a mobile device")
-  })
+                      "Updated: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
+                      "\nhttps://www.covid19watcher.com", sep = ""))
   
   # #USE THIS DURING TESTING
   # covidData = reactive({
