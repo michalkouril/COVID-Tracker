@@ -174,13 +174,13 @@ server <- function(input, output, session) {
   referenceUs = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
                       "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
-                      "\nLast data update: ", updateTime(),
+                      "\nLast data update: ", isolate(updateTime()),
                       "\ncovid19watcher.research.cchmc.org", sep = ""))
   
   # #USE THIS DURING TESTING
   # covidData = reactive({
   #   data = read.csv("us-counties.csv", stringsAsFactors = F)
-  #   
+  # 
   #   #Add the special cases
   #   data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
   #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
@@ -190,17 +190,18 @@ server <- function(input, output, session) {
   #            date = as.Date(date))
   # 
   #   #Add the unknow counties
-  #   data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county")) 
+  #   data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
   #   data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
-  #   
+  # 
   #   updateTime(as.character(max(data$date, na.rm = T)))
   # 
   #   data  %>% select(-county, - state)
   # })
   
-  # USE THIS ONLINE
+  #USE THIS ONLINE
   covidData = reactive({
     data = sourceDataNYT()
+
 
     #Add the special cases
     data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
@@ -330,6 +331,7 @@ server <- function(input, output, session) {
   # ---- Generate plot 1----
   #****************************
   plot1 = reactive({
+
     startCases = ifelse(input$outcome == 1, 10, 1)
     
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
@@ -392,9 +394,9 @@ server <- function(input, output, session) {
       labs(title = sprintf('COVID-19 %s in %s', 
                            ifelse(input$outcome == 1, "Cases", "Deaths"),
                            case_when(
-                             input$regionType == "CSA.Title" ~ "U.S. Metropolitan Areas",
-                             input$regionType == "stateCounty" ~ "U.S. Counties",
-                             input$regionType == "State_name" ~ "U.S. States",
+                             isolate(input$regionType) == "CSA.Title" ~ "U.S. Metropolitan Areas",
+                             isolate(input$regionType) == "stateCounty" ~ "U.S. Counties",
+                             isolate(input$regionType) == "State_name" ~ "U.S. States",
                              T ~ "the USA"
                            )),
            caption = isolate(referenceUs()))  +
@@ -414,6 +416,7 @@ server <- function(input, output, session) {
   # ---- Render the plot ----
   #**************************
   output$plot1 <- renderPlot({
+    req(!is.null(input$region))
     plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 40)) 
      #If mobile, use statix width for plot, else dynamic 
   }, height = 600, width = function(){ifelse(input$isMobile, 1000, "auto")})
