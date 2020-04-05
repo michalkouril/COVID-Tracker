@@ -63,9 +63,7 @@ labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 
   return(list(posX = posX, posY= posY))
 }
 
-referenceUs = paste("Authors: Benjamin Wissel, PJ Van Camp\nData from The New York Times, ",
-                    "based on reports from state and local health agencies.\n",
-                    "https://covid19watcher.com/", sep = "")
+referenceUs = paste('Authors: Benjamin Wissel and Pieter Jan (PJ) Van Camp, MD\nData from The New York Times, based on reports from state and local health agencies.\nUpdated: ', `attr<-`(Sys.time(),"tzone","America/New_York") %>% format("%B %d, %I:%M %p"), ' EST\nhttps://www.covid19watcher.com', sep = '')
 
 # Define UI for application
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
@@ -95,7 +93,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
-                  #downloadButton("downloadPlot1", "Download current plot"),
+                  downloadButton("downloadPlot1", "Download plot"),
                   tags$div(textOutput("filterWarnings"), style = "color: red;")
                 ),
                 mainPanel(
@@ -353,7 +351,7 @@ server <- function(input, output, session) {
                              input$regionType == "State.Name" ~ "U.S. States",
                              T ~ "the USA"
                            )),
-           caption = paste('Authors: Benjamin Wissel and Pieter Jan (PJ) Van Camp, MD\nData from The New York Times, based on reports from state and local health agencies.\nUpdated: ', `attr<-`(Sys.time(),"tzone","America/New_York") %>% format("%B %d, %I:%M %p"), ' EST\nhttps://www.covid19watcher.com', sep = ''))  +
+           caption = referenceUs)  +
       xlab(xLabel) + ylab(yLabel) +
       coord_cartesian(clip = 'off') + #prevent clipping off labels
       theme(plot.title = element_text(hjust = 0.0),
@@ -377,18 +375,17 @@ server <- function(input, output, session) {
   
   # ---- Download plot ----
   #*************************
-  # output$downloadPlot1 <- downloadHandler(
-  #   filename = function() {
-  #     paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
-  #   },
-  #   content = function(file) {
-  #     myPlot = plot1() +
-  #       labs(subtitle = paste("Data for three weeks prior to", format(Sys.Date(), format = "%d %b %Y")),
-  #            caption =  referenceUs)
-  #       
-  #     ggsave(file, myPlot, width = 16, height = 7, device = "png")
-  #   }
-  # )
+  output$downloadPlot1 <- downloadHandler(
+    filename = function() {
+      paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
+    },
+    content = function(file) {
+      myPlot = plot1() +
+        labs(caption =  referenceUs)
+
+      ggsave(file, myPlot, width = 12, height = 7, device = "png")
+    }
+  )
   
   # ---- Warning message ----
   #***************************
