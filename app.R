@@ -1,4 +1,9 @@
-# load required packages
+#********************************************************
+# ---- COVID 19 WATCHER (Ben Wissel and PJ Van Camp) ----
+#********************************************************
+
+# ---- Packages and general settings ----
+#****************************************
 if(!require(openxlsx)) install.packages("openxlsx", repos = "http://cran.us.r-project.org")
 if(!require(dplyr)) install.packages("dplyr", repos = "http://cran.us.r-project.org")
 if(!require(ggplot2)) install.packages("ggplot2", repos = "http://cran.us.r-project.org")
@@ -8,19 +13,30 @@ if(!require(shinyWidgets)) install.packages("shinyWidgets", repos = "http://cran
 if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://cran.us.r-project.org")
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
+if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
 Sys.setenv(TZ='America/New_York')
 
-## Load in the data
+
+# ---- Loading initial data----
+#******************************
+
+#FIPS data
 fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
-  mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019))
+  mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019), Country = "USA") 
 
 #Merge the state and county for search of county
-fipsData$stateCounty = paste(fipsData$State.Name, "-", fipsData$County.County.Equivalent)
+fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
 
-#Link to the NYTimes data on GitHub
+#Get total population by region
+popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByState = fipsData %>% group_by(State.Name) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
+
+#Reactive link to the NYTimes data on GitHub
 sourceDataNYT <- reactiveFileReader(
   intervalMillis = 3.6e+6, #Check every hour
   session = NULL,
@@ -28,9 +44,9 @@ sourceDataNYT <- reactiveFileReader(
   read.csv, stringsAsFactors=FALSE
 )
 
-#Set some parameters
-popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019))
 
+# ---- Functions ----
+#********************
 
 #Function used to generate the doubleing rate guide
 doubleRate = function(x, startCases = 10, daysToDouble = 3, population = 10000, perHowMany = 10000) {
@@ -59,34 +75,52 @@ labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 
   return(list(posX = posX, posY= posY))
 }
 
+#Function to detect if a mobile device is used (for plot size)
+mobileDetect <- function(inputId, value = 0) {
+  tagList(
+    singleton(tags$head(tags$script(src = "js/mobile.js"))),
+    tags$input(id = inputId,
+               class = "mobile-element",
+               type = "hidden")
+  )
+}
 
-# Define UI for application
+
+# ---- UI ----
+#**************
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                  "COVID-19 Watcher", id="nav",
 
         tabPanel("Plots",
                sidebarLayout(  
-                sidebarPanel(
-                  radioButtons("regionType", "Region detail", list("Metro areas" = "CSA.Title", "Counties" = "stateCounty"), inline = T),
-                   selectInput(inputId = "region",
-                              label = "Select one or more regions",
-                              choices = "",
-                              multiple = T, 
-                              selectize = T,
-                              width = "400px"
+                sidebarPanel(width = 4,
+                  radioButtons("regionType", "Region", 
+                               list("County" = "stateCounty", "City" = "CSA.Title", 
+                                    "State" = "State.Name", "USA" = "Country"), inline = T, selected = "CSA.Title"),
+                  conditionalPanel(
+                    condition = "input.regionType != 'Country'", 
+                     selectInput(inputId = "region",
+                                label = "Select one or more regions",
+                                choices = "",
+                                multiple = T, 
+                                selectize = T
+                    ),
+                    helpText('Tip: type the name for easy searching'),hr()
                   ),
-                  helpText('Tip: type the city name for easy searching.'),hr(),
-                  radioButtons("outcome", "Data", list("Confirmed cases" = 1, "Deaths" = 2), inline = T),
+                  radioButtons("outcome", "Data", list("Cases" = 1, "Deaths" = 2), inline = T),
                   radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
                   conditionalPanel(
                     condition = "input.yScale == 1",  
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
-                  tags$div(textOutput("filterWarnings"), style = "color: red;")
+                  downloadButton("downloadPlot1", "Download plot"),
+                  tags$div(textOutput("filterWarnings"), style = "color: red;"),
+                  mobileDetect('isMobile')
+
                 ),
                 mainPanel(
-                  plotOutput(outputId = 'plot1', width = "1000px", height = "600px")
+                  plotOutput(outputId = 'plot1')
                 )
               )
         ),
@@ -101,67 +135,80 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    tags$b("COVID-19 cases and deaths: "), HTML(paste0(a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times', target="_blank"), ", based on reports from state and local health agencies.", sep = '')), 
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), HTML(paste0(a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget', target="_blank"), ".", sep = '')),
                    tags$br(),tags$b("Population estimates: "), HTML(paste0(a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau', target="_blank"), ".", sep = '')),
-                   tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and', tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker', target="_blank"),', respectively.',
+                   tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', 
+                   tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and', 
+                   tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker', target="_blank"),', respectively.',
                    tags$br(),tags$br(),tags$h4("Code"),
-                   HTML(paste0("This is an open-source tool and suggestions for improvement are welcomed. Those interested in contributing to this site can access the code on ", a(href='https://github.com/wisselbd/COVID-Tracker','GitHub', target="_blank"), ". Major contributions will be acknowledged.", sep = '')),
+                   HTML(paste0("This is an open-source tool and suggestions for improvement are welcomed. Those interested in contributing to this site can access the code on ", 
+                               a(href='https://github.com/wisselbd/COVID-Tracker','GitHub', target="_blank"), ". Major contributions will be acknowledged.", sep = '')),
                    tags$br(),tags$br(),tags$h4("Authors"),
                    HTML(paste0("Benjamin Wissel, BS<sup>1,2</sup>, and PJ Van Camp, MD<sup>1,2</sup>", sep = "")), tags$br(),tags$br(), 
                    HTML(paste0("<sup>1</sup>Department of Biomedical Informatics, University of Cincinnati College of Medicine", sep = "")), tags$br(), 
                    HTML(paste0("<sup>2</sup>Division of Biomedical Informatics, Cincinnati Children's Hospital Medical Center", sep = "")),
                    tags$br(),tags$br(),tags$h4("Contact"),
                    #PJ: Can you make this email address a hyperlink that pulls up an email?
-                   "benjamin.wissel@cchmc.org",tags$br(),
-                   tags$a(href="https://twitter.com/BDWissel", "@bdwissel", target="_blank"), 
+                   HTML('<b>Benjamin Wissel</b><br>Email: <a href="mailto:benjamin.wissel@cchmc.org?Subject=About%20COVID19%20WATCHER" target="_top">benjamin.wissel@cchmc.org</a>'),
+                   tags$br(),
+                   "Twitter: ", tags$a(href="https://twitter.com/BDWissel", "@bdwissel", target="_blank"),
+                   HTML("<br><br><b>PJ Van Camp</b><br>LinkedIn: <a href='https://www.linkedin.com/in/pjvancamp/'>pjvancamp</a>"),
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
                    HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Chad Weis and ", 
-a(href="https://www.cincinnatichildrens.org/bio/k/michal-kouril", "Michal Kouril, PhD", target="_blank"), " for their help building the infrastructure for the site. 
-                   Thank you to Leighanne Toole for promoting and media relations, and ", a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), " and Sander Su for their help lauching the beta version of this site.", sep = "")),
-                   " We have received excellent feedback from the academic community that has improved our presentation of the data, especially from Samuel Keltner."
+                    a(href="https://www.cincinnatichildrens.org/bio/k/michal-kouril", "Michal Kouril, PhD", target="_blank"), 
+                    " for their help building the infrastructure for the site. ",
+                    "Thank you to Leighanne Toole for promoting and media relations, and ", 
+                   a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
+                   " and Sander Su for their help lauching the beta version of this site.", sep = "")),
+                   " We have received excellent feedback from the academic community that has improved our presentation of the data, ",
+                   "especially from Samuel Keltner."
                    
                  )
         )
 )
-# Define server logic
+
+
+# ---- SERVER ----
+#*****************
 server <- function(input, output, session) {
   
-  showModal(modalDialog(title = "IMPORTANT NOTE", HTML(
-    "Several areas are not grouped by county or metropolitan area,
-    although you can still search for them:<ul><li><b>New York City</b>: The five boroughs of New York City
-    (New York, Kings, Queens, Bronx and Richmond counties) are assigned to a single area called New York City
-    </li><li><b>Kansas City</b>: Four counties (Cass, Clay, Jackson and Platte) overlap the municipality
-    of Kansas City, Mo. The cases and deaths that we show for these four counties are only for the portions
-    exclusive of Kansas City. Cases and deaths for Kansas City are reported as their own line</li>
-    <li><b>Chicago</b>: All cases and deaths for Chicago are reported as part of Cook County</li></ul>
-    For details, visit the <a href='https://github.com/nytimes/covid-19-data'>New York Times GitHub</a>"
-  )))
+  referenceUs = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
+                      "Data from The New York Times, based on reports from state and local health agencies.\n",
+                      "Updated: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
+                      "\nhttps://www.covid19watcher.com", sep = ""))
   
-  #USE THIS DURING TESTING
+  # #USE THIS DURING TESTING
+  # covidData = reactive({
+  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
+  #   #Add the special cases
+  #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+  # 
+  #   data = data %>%
+  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+  #            date = as.Date(date)) %>% select(-county, - state)
+  #   data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+  #   data[data$county == "Kansas City", "fips"] = "00001"
+  #   updateTime(as.character(max(data$date, na.rm = T) %>% format('%B %d, %Y')))
+  # 
+  #   data
+  # })
+  
+  # USE THIS ONLINE
   covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F) 
-    #Add the special cases
+    data = sourceDataNYT()
     data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
     data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-    
+
     data = data %>%
       mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
              date = as.Date(date)) %>% select(-county, - state)
     data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
     data[data$county == "Kansas City", "fips"] = "00001"
     updateTime(as.character(max(data$date, na.rm = T)))
-    
+
     data
   })
-  
-  # # #USE THIS ONLINE
-  # covidData = reactive({
-  #   data = sourceDataNYT() %>%
-  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-  #            date = as.Date(date)) %>% select(-county, - state)
-  #   updateTime(as.character(max(data$date, na.rm = T)))
-  #   data
-  # })
-  
-  updateTime = reactiveVal('April 3, 09:30 AM EST.')
+
+  updateTime = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
   regionTest = reactiveVal("")
   
@@ -171,13 +218,18 @@ server <- function(input, output, session) {
   observeEvent(input$regionType, {
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
-                        selected = c("Seattle-Tacoma, WA"))
-    } else {
+                        selected = c("New Orleans-Metairie-Hammond, LA-MS", "San Jose-San Francisco-Oakland, CA"))
+    } else if(isolate(input$regionType) == "stateCounty") {
       updateSelectInput(session, "region", "Select one or more counties", choices = sort(unique(fipsData$stateCounty)),
-                        selected = "Ohio - Hamilton County")
+                        selected = "CA: Orange County")
+    } else if(isolate(input$regionType) == "State.Name") {
+      updateSelectInput(session, "region", "Select one or more states", choices = sort(unique(fipsData$State.Name)),
+                        selected = "Missouri")
+    } else {
+      updateSelectInput(session, "region", "Select one or more countries", choices = sort(unique(fipsData$Country)),
+                        selected = "USA")
     }
   })
-  
 
   #Calculate the data to be displayed
    plot.data = reactive({
@@ -204,8 +256,23 @@ server <- function(input, output, session) {
        select(region = !!groupByRegion, FIPS) %>% group_by(region, FIPS) %>% 
        left_join(covidNumbers, by = c("FIPS" = "fips")) %>% #Join the cases per fips
        filter(!is.na(date)) %>% group_by(region, date) %>% #Now group per region
-       summarise(cases = sum(cases), deaths = sum(deaths)) %>% 
-       left_join(popByMetro, by = c("region" = "CSA.Title")) %>%
+       summarise(cases = sum(cases), deaths = sum(deaths)) 
+     
+     if(isolate(input$regionType) == "CSA.Title"){
+       plotData = plotData %>% 
+         left_join(popByMetro, by = c("region" = "CSA.Title")) 
+     } else if(isolate(input$regionType) == "stateCounty"){
+       plotData = plotData %>% 
+         left_join(popByCounty, by = c("region" = "stateCounty"))
+     } else if(isolate(input$regionType) == "State.Name"){
+       plotData = plotData %>% 
+         left_join(popByState, by = c("region" = "State.Name"))
+     } else {
+       plotData = plotData %>% 
+         left_join(popByCountry, by = c("region" = "Country"))
+     }
+     
+     plotData = plotData %>% ungroup() %>% 
        mutate(x = date, y = !!outcome) %>% #add the population per region
        filter(y > 0) #Only show cases / deaths more than 0
      
@@ -218,21 +285,22 @@ server <- function(input, output, session) {
      omitted = NULL
      if(input$yScale == 2){
        plotData = plotData %>% 
-
          filter(y >= startCases) %>% group_by(region) %>% #Filter 10+
          mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
-       omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
      }
+     
+     omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
      
      #Update warning if needed
      if(length(omitted) > 0){
-       filterWarning(paste("The following have a total less than", startCases, "cases and were omitted:", 
+       filterWarning(paste("The following have a less than", ifelse(input$yScale == 1, 1, startCases), 
+                           ifelse(input$outcome == 1, "cases", "death"), "and were omitted:", 
                            paste(omitted, collapse = "; "))) #displayed as warning
      } else {
        filterWarning("")
      }
      
-     #When cases per 10,000
+     #When normalizing cases or deaths per 10,000 residents
      if(input$relPop == 1 && input$yScale == 1){
        plotData = plotData %>% 
          mutate(y = y / (population / 10000))
@@ -242,19 +310,18 @@ server <- function(input, output, session) {
      myOrder = plotData %>% group_by(region) %>% summarise(y = max(y)) %>% arrange(desc(y))
      plotData$region = factor(plotData$region, levels = c(myOrder$region))
      
-     plotData
+     plotData %>% ungroup()
      
   })
    
-   
-  #THis is the plot itself
-  output$plot1 <- renderPlot({
-    
+  # ---- Generate plot 1----
+  #****************************
+  plot1 = reactive({
     startCases = ifelse(input$outcome == 1, 10, 1)
-
+    
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
       geom_line(size = 1.2)
-
+    
     #Guide for doubling time
     if(input$yScale == 2){ #Only relevant when aligned by number of starting cases
       
@@ -262,61 +329,99 @@ server <- function(input, output, session) {
       pop = ifelse(F, 
                    mean(plot.data() %>% group_by(region) %>% summarise(p = max(population)) %>% pull(p)),
                    10000)
-
+      
       
       #Generate the doubline time using the doubleRate function (see at top)
       if(input$yScale == 2){
         plot = plot + 
+          stat_function(fun = ~log10(doubleRate(.x, startCases, 1, pop)),
+                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
           stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
           stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
-
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
-        
-        twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
-        threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
-      } else {
-        plot = plot + 
-          stat_function(fun = ~doubleRate(.x, startCases, 2, pop),
                         linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~doubleRate(.x, startCases, 3, pop),
-                      linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
-        
+          stat_function(fun = ~log10(doubleRate(.x, startCases, 7, pop)),
+                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
+          
+        oneDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 1, startCases = startCases)
         twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
         threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
+        sevenDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 7, startCases = startCases)
       }
       
       plot = plot +
-        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "Double every\n2 days", color = "#8D8B8B") +
-        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "Double every\n3 days", color = "#8D8B8B") + 
+        annotate("text", x = oneDayLabel$posX, y = oneDayLabel$posY, label = "Doubles every day", color = "#8D8B8B") +
+        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
+        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
+        annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
         scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
-        
+      
+    } else {
+      plot = plot + scale_y_continuous(labels = comma)
     }
-
-    #Finalize the plot
+    
     #Labels depend on selections
     xLabel = ifelse(input$yScale == 1, "Date", 
                     paste("Number of Days Since",
                           ifelse(input$outcome == 1, "10th Case", "1st Death")))
-
-    yLabel = ifelse(input$relPop == 1 && input$yScale == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", "Deaths per 10,000 Residents"), 
-                    ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
-
-    plot + theme_bw() +
-      labs(title = sprintf('COVID-19 %s in U.S. Metropolitan Areas', 
-                           ifelse(input$outcome == 1, "Cases", "Deaths")),
-           caption =  paste("Authors: Benjamin Wissel, PJ Van Camp\nData from The New York Times, ",
-                            "based on reports from state and local health agencies.\n",
-                            "http://bit.ly/covid-cities", sep = ""))  +
-      xlab(xLabel) + ylab(yLabel) +
-      theme(legend.position = 'right', legend.direction = "vertical", 
-            legend.title = element_blank(), 
-            plot.caption = element_text(hjust = 0.0), 
-
-            text = element_text(size=20))
     
-  })
+    yLabel = ifelse(input$relPop == 1 && input$yScale == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", 
+                                                                  "Deaths per 10,000 Residents"), 
+                    ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
+    
+    plot + theme_bw() +
+      #Add the latest counts at the end of the curve
+      geom_text(data = plot.data() %>% filter(date == last(date)), 
+                aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
+                  {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
+                    x = x, y = y), size = 4, check_overlap = T,hjust=0, vjust=0.5) +
+      #Update the labs based on the filters
+      labs(title = sprintf('COVID-19 %s in %s', 
+                           ifelse(input$outcome == 1, "Cases", "Deaths"),
+                           case_when(
+                             input$regionType == "CSA.Title" ~ "U.S. Metropolitan Areas",
+                             input$regionType == "stateCounty" ~ "U.S. Counties",
+                             input$regionType == "State.Name" ~ "U.S. States",
+                             T ~ "the USA"
+                           )),
+           caption = isolate(referenceUs()))  +
+      xlab(xLabel) + ylab(yLabel) +
+      coord_cartesian(clip = 'off') + #prevent clipping off labels
+      theme(plot.title = element_text(hjust = 0.0),
+            legend.position = 'right', legend.direction = "vertical", 
+            legend.title = element_blank(), 
+            panel.border = element_blank(),
+            plot.caption = element_text(hjust = 0.0, size = 14),
+            axis.line = element_line(colour = "black"),
+            text = element_text(size=20)) +
+      #Set the icons of the legend (looked weird)
+      guides(colour = guide_legend(override.aes = list(size=1.5, shape=95)))
+  }) 
+   
+  # ---- Render the plot ----
+  #**************************
+  output$plot1 <- renderPlot({
+    plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 40)) 
+     #If mobile, use statix width for plot, else dynamic 
+  }, height = 600, width = function(){ifelse(input$isMobile, 1000, "auto")})
+
   
+  # ---- Download plot ----
+  #*************************
+  output$downloadPlot1 <- downloadHandler(
+    filename = function() {
+      paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
+    },
+    content = function(file) {
+      myPlot = plot1() +
+        labs(caption =  isolate(referenceUs()))
+      ggsave(file, myPlot, width = 12, height = 7, device = "png")
+
+    }
+  )
+  
+  # ---- Warning message ----
+  #***************************
   #Warning when display after first 10 cases and regions don't have 10+
   output$filterWarnings = renderText({
     filterWarning()
