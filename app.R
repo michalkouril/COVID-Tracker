@@ -174,26 +174,10 @@ server <- function(input, output, session) {
     ifelse(input$isMobile, "You are on a mobile device", "You are not on a mobile device")
   })
   
-  #USE THIS DURING TESTING
-  covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F)
-    #Add the special cases
-    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
-    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
-
-    data = data %>%
-      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-             date = as.Date(date)) %>% select(-county, - state)
-    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
-    data[data$county == "Kansas City", "fips"] = "00001"
-    updateTime(as.character(max(data$date, na.rm = T) %>% format('%B %d, %Y')))
-
-    data
-  })
-  
-  # # USE THIS ONLINE
+  # #USE THIS DURING TESTING
   # covidData = reactive({
-  #   data = sourceDataNYT()
+  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
+  #   #Add the special cases
   #   data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
   #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
   # 
@@ -202,10 +186,26 @@ server <- function(input, output, session) {
   #            date = as.Date(date)) %>% select(-county, - state)
   #   data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
   #   data[data$county == "Kansas City", "fips"] = "00001"
-  #   updateTime(as.character(max(data$date, na.rm = T)))
+  #   updateTime(as.character(max(data$date, na.rm = T) %>% format('%B %d, %Y')))
   # 
   #   data
   # })
+  
+  # USE THIS ONLINE
+  covidData = reactive({
+    data = sourceDataNYT()
+    data[data$county == "New York City" & data$state == "New York","fips"] = "00000" #NYC
+    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "00001" #Kansas City
+
+    data = data %>%
+      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+             date = as.Date(date)) %>% select(-county, - state)
+    data[data$county == "New York City", "fips"] = "00000" #They don't provide fips!
+    data[data$county == "Kansas City", "fips"] = "00001"
+    updateTime(as.character(max(data$date, na.rm = T)))
+
+    data
+  })
 
   updateTime = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
