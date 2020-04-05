@@ -353,7 +353,7 @@ server <- function(input, output, session) {
                              input$regionType == "State.Name" ~ "U.S. States",
                              T ~ "the USA"
                            )),
-           caption = paste('Authors: Benjamin Wissel and Pieter Jan (PJ) Van Camp, MD\nData from The New York Times, based on reports from state and local health agencies.\nUpdated: ', `attr<-`(Sys.time(),"tzone","America/New_York") %>% format("%B %d, %I:%M %p"), '\nhttps://www.covid19watcher.com', sep = ''))  +
+           caption = paste('Authors: Benjamin Wissel and Pieter Jan (PJ) Van Camp, MD\nData from The New York Times, based on reports from state and local health agencies.\nUpdated: ', `attr<-`(Sys.time(),"tzone","America/New_York") %>% format("%B %d, %I:%M %p"), ' EST\nhttps://www.covid19watcher.com', sep = ''))  +
       xlab(xLabel) + ylab(yLabel) +
       coord_cartesian(clip = 'off') + #prevent clipping off labels
       theme(plot.title = element_text(hjust = 0.0),
