@@ -44,10 +44,6 @@ sourceDataNYT <- reactiveFileReader(
   read.csv, stringsAsFactors=FALSE
 )
 
-referenceUs = paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
-                    "Data from The New York Times, based on reports from state and local health agencies.\n",
-                    "Updated: ", `attr<-`(Sys.time(),"tzone","America/New_York") %>% 
-                      format("%B %d, %I:%M %p"), "EST\nhttps://www.covid19watcher.com", sep = "")
 
 # ---- Functions ----
 #********************
@@ -169,6 +165,11 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
 # ---- SERVER ----
 #*****************
 server <- function(input, output, session) {
+  
+  referenceUs = paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
+                      "Data from The New York Times, based on reports from state and local health agencies.\n",
+                      "Updated: ", `attr<-`(Sys.time(),"tzone","America/New_York") %>% 
+                        format("%B %d, %I:%M %p"), "EST\nhttps://www.covid19watcher.com", sep = "")
   
   output$isItMobile <- renderText({
     ifelse(input$isMobile, "You are on a mobile device", "You are not on a mobile device")
