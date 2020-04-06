@@ -79,7 +79,7 @@ labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 
 #Function to detect if a mobile device is used (for plot size)
 mobileDetect <- function(inputId, value = 0) {
   tagList(
-    singleton(tags$head(tags$script(src = "js/mobile.js"))),
+    singleton(tags$head(tags$script(src = "extraJS.js"))),
     tags$input(id = inputId,
                class = "mobile-element",
                type = "hidden")
