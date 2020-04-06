@@ -22,4 +22,11 @@ Shiny.inputBindings.register(isMobileBinding);
 $(document).on('shiny:connected', function(event) {
   var now = new Date().toLocaleString('en-us', {timeZoneName:'short'});
   Shiny.setInputValue("clientTime", now);
+
 });
+
+//$(document).ready(function(){
+//  var header = $('.navbar> .container-fluid > .navbar-collapse');
+//  header.append('<img src="headerLogo.png" align="right" height="40px">');
+
+//});

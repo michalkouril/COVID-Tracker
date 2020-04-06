@@ -89,9 +89,9 @@ mobileDetect <- function(inputId, value = 0) {
 
 # ---- UI ----
 #**************
-ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
-                 "COVID-19 Watcher", id="nav",
-
+ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
+        title = div("COVID-19 Watcher"),
+        
         tabPanel("Plots",
                sidebarLayout(  
                 sidebarPanel(width = 4,
@@ -163,7 +163,10 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE,
                    "especially from Samuel Keltner."
                    
                  )
-        )
+        ),
+        #Add the logo
+        tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
+                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"../HeaderLogo.png\" height=\"40px\"></div>');"))
 )
 
 
@@ -177,31 +180,9 @@ server <- function(input, output, session) {
                       "\nLast data update: ", isolate(updateTime()),
                       "\ncovid19watcher.research.cchmc.org", sep = ""))
   
-  # #USE THIS DURING TESTING
-  # covidData = reactive({
-  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
-  # 
-  #   #Add the special cases
-  #   data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
-  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
-  # 
-  #   data = data %>%
-  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-  #            date = as.Date(date))
-  # 
-  #   #Add the unknow counties
-  #   data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
-  #   data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
-  # 
-  #   updateTime(as.character(max(data$date, na.rm = T)))
-  # 
-  #   data  %>% select(-county, - state)
-  # })
-  
-  #USE THIS ONLINE
+  #USE THIS DURING TESTING
   covidData = reactive({
-    data = sourceDataNYT()
-
+    data = read.csv("us-counties.csv", stringsAsFactors = F)
 
     #Add the special cases
     data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
@@ -219,6 +200,28 @@ server <- function(input, output, session) {
 
     data  %>% select(-county, - state)
   })
+  
+  # #USE THIS ONLINE
+  # covidData = reactive({
+  #   data = sourceDataNYT()
+  # 
+  # 
+  #   #Add the special cases
+  #   data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
+  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
+  # 
+  #   data = data %>%
+  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+  #            date = as.Date(date))
+  # 
+  #   #Add the unknow counties
+  #   data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
+  #   data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
+  # 
+  #   updateTime(as.character(max(data$date, na.rm = T)))
+  # 
+  #   data  %>% select(-county, - state)
+  # })
 
   updateTime = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
