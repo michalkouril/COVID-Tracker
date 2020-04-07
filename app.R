@@ -29,9 +29,9 @@ local_data_only = T
 #******************************
 
 #FIPS data
-fipsData = read.csv("fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
+fipsData = read.csv("data/fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
   mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019)) 
-unknownCounties = read.csv("unknownCounties.csv", stringsAsFactors = F, colClasses = "character")
+unknownCounties = read.csv("data/unknownCounties.csv", stringsAsFactors = F, colClasses = "character")
 
 #Merge the state and county for search of county
 fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
@@ -55,12 +55,12 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                          
                          if(status_code(test) == 200){
                            data = read.csv(link, stringsAsFactors = F)
-                           write.csv(data, "us-counties.csv", row.names = F)
+                           write.csv(data, "data/us-counties.csv", row.names = F)
                            print("NYT data succesfully refreshed")
                            data
                          } else {
                            print("NYT not accessible, stored data used")
-                           read.csv("us-counties.csv", stringsAsFactors = F)
+                           read.csv("data/us-counties.csv", stringsAsFactors = F)
                          }
                        })
 
@@ -75,12 +75,12 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                          
                          if(status_code(data) == 200){
                            data = content(data)
-                           write.csv(data, "hospitalData.csv", row.names = F)
+                           write.csv(data, "data/hospitalData.csv", row.names = F)
                            print("covidProjectData data succesfully refreshed")
                            data
                          } else {
                            print("covidProjectData not accessible, stored data used")
-                           read.csv("hospitalData.csv", stringsAsFactors = F)
+                           read.csv("data/hospitalData.csv", stringsAsFactors = F)
                          }
                        })
 
@@ -246,7 +246,7 @@ server <- function(input, output, session) {
                                "\nLast data update: ", isolate(updateTimeHospital()),
                                "\ncovid19watcher.research.cchmc.org", sep = ""))
   
-  #USE THIS ONLINE
+  #Load the NYT data
   covidData = reactive({
     
     data = NYTdata()
@@ -268,8 +268,7 @@ server <- function(input, output, session) {
     data  %>% select(-county, - state)
   })
 
-
-  # USE THIS ONLINE - Hospital data
+  #Load the COVID project data
   hospitalData = reactive({
     
     data = covidProjectData() %>% 
