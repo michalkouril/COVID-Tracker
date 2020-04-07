@@ -152,6 +152,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                    tags$b("COVID-19 cases and deaths: "), HTML(paste0(a(href='https://www.nytimes.com/article/coronavirus-county-data-us.html','The New York Times', target="_blank"), ", based on reports from state and local health agencies.", sep = '')), 
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), HTML(paste0(a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget', target="_blank"), ".", sep = '')),
                    tags$br(),tags$b("Population estimates: "), HTML(paste0(a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau', target="_blank"), ".", sep = '')),
+                   tags$br(),tags$b("COVID-19 Testing data: "), HTML(paste0(a(href='https://covidtracking.com/about-project','The COVID Tracking Project', target="_blank"), ".", sep = '')),
                    tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', 
                    tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and', 
                    tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker', target="_blank"),', respectively.',
@@ -190,11 +191,17 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
 #*****************
 server <- function(input, output, session) {
   
-  referenceUs = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
+  referenceUs1 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
                       "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
                       "\nLast data update: ", isolate(updateTime()),
                       "\ncovid19watcher.research.cchmc.org", sep = ""))
+  
+  referenceUs2 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
+                               "Data from 'The COVID Tracking Project'\n",
+                               "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
+                               "\nLast data update: ", isolate(updateTimeHospital()),
+                               "\ncovid19watcher.research.cchmc.org", sep = ""))
   
   #USE THIS DURING TESTING
   covidData = reactive({
@@ -220,9 +227,13 @@ server <- function(input, output, session) {
 
   #Hospital data based on Covi-Tracking project - https://covidtracking.com/about-project
   hospitalData = reactive({
-    read.csv("hospitalData.csv", stringsAsFactors = F) %>%
+    data = read.csv("hospitalData.csv", stringsAsFactors = F) %>%
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
       left_join(popByState, by = c("state" = "State"))
+
+    updateTimeHospital(as.character(max(data$date, na.rm = T)))
+
+    data
   })
   
   # #USE THIS ONLINE
@@ -257,14 +268,19 @@ server <- function(input, output, session) {
   #   test = GET("https://covidtracking.com/api/v1/states/daily.csv")
   # 
   #   req(status_code(test) == 200)
-  #   content(test) %>% mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>% 
+  #   data = content(test) %>% mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
   #     left_join(popByState, by = c("state" = "State"))
+  # 
+  #   updateTimeHospital(as.character(max(data$date, na.rm = T)))
+  # 
+  #   data
   # 
   # })
   
   
   
   updateTime = reactiveVal(Sys.time())
+  updateTimeHospital = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
   filterWarningTest = reactiveVal("")
   regionTest = reactiveVal("")
@@ -443,7 +459,7 @@ server <- function(input, output, session) {
                              isolate(input$regionType) == "State_name" ~ "U.S. States",
                              T ~ "the USA"
                            )),
-           caption = isolate(referenceUs()))  +
+           caption = isolate(referenceUs1()))  +
       xlab(xLabel) + ylab(yLabel) +
       coord_cartesian(clip = 'off') + #prevent clipping off labels
       theme(plot.title = element_text(hjust = 0.0),
@@ -472,7 +488,7 @@ server <- function(input, output, session) {
     },
     content = function(file) {
       myPlot = casesPlot() +
-        labs(caption =  isolate(referenceUs()))
+        labs(caption =  isolate(referenceUs1()))
       ggsave(file, myPlot, width = 12, height = 7, device = "png")
 
     }
@@ -516,7 +532,7 @@ server <- function(input, output, session) {
                               input$testCurve == "negative" ~ "Negative",
                               T ~ "All"
                             )),
-            caption = isolate(referenceUs()))  +
+            caption = isolate(referenceUs2()))  +
        xlab("Date") + ylab("Number of tests") +
        coord_cartesian(clip = 'off') + #prevent clipping off labels
        theme(plot.title = element_text(hjust = 0.0),
