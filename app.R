@@ -14,6 +14,7 @@ if(!require(shinydashboard)) install.packages("shinydashboard", repos = "http://
 if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
 if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
+if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -33,17 +34,12 @@ fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
 
 #Get total population by region
 popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByState = fipsData %>% group_by(State_name) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
+popByState = fipsData %>% group_by(State_name, State) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
 popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
 popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
 
-#Reactive link to the NYTimes data on GitHub
-sourceDataNYT <- reactiveFileReader(
-  intervalMillis = 3.6e+6, #Check every hour
-  session = NULL,
-  filePath = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv",
-  read.csv, stringsAsFactors=FALSE
-)
+#Reactive link to refresh data
+refreshData = reactiveTimer(3.6e+6)
 
 
 # ---- Functions ----
@@ -92,7 +88,7 @@ mobileDetect <- function(inputId, value = 0) {
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
         title = div("COVID-19 Watcher"),
         
-        tabPanel("Plots",
+        tabPanel("Cases/Deaths",
                sidebarLayout(  
                 sidebarPanel(width = 4,
                   radioButtons("regionType", "Region", 
@@ -115,15 +111,35 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
-                  downloadButton("downloadPlot1", "Download plot"),
+                  downloadButton("downloadcasesPlot", "Download plot"),
                   tags$div(textOutput("filterWarnings"), style = "color: red;"),
                   mobileDetect('isMobile')
 
                 ),
                 mainPanel(
-                  plotOutput(outputId = 'plot1')
+                  plotOutput(outputId = 'casesPlot')
                 )
               )
+        ),
+        tabPanel("Testing",
+                 sidebarLayout(
+                   sidebarPanel(
+                     width = 4,
+                     selectInput(inputId = "testState", label = "Select one or more states",
+                                 choices = popByState$State_name, 
+                                 multiple = T, selectize = T, selected = "Ohio"
+                     ),
+                     radioButtons("testCurve", "COVID-19 tests", 
+                                  list("Positive" = "positive", "Negative" = "negative", "All" = "totalTestResults"), 
+                                  inline = T),
+                     tags$div(textOutput("filterWarningsTest"), style = "color: red;"),
+                     br(),
+                     downloadButton("downloadTestPlot", "Download plot"),
+                   ),
+                   mainPanel(
+                     plotOutput(outputId = 'testPlot')
+                   )
+                 )
         ),
         tabPanel("About this site",
                  tags$div(
@@ -166,7 +182,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
         ),
         #Add the logo
         tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
-                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"../HeaderLogo.png\" height=\"40px\"></div>');"))
+                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"HeaderLogo.png\" height=\"40px\"></div>');"))
 )
 
 
@@ -200,11 +216,22 @@ server <- function(input, output, session) {
 
     data  %>% select(-county, - state)
   })
+
+
+  #Hospital data based on Covi-Tracking project - https://covidtracking.com/about-project
+  hospitalData = reactive({
+    read.csv("hospitalData.csv", stringsAsFactors = F) %>%
+      mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
+      left_join(popByState, by = c("state" = "State"))
+  })
   
   # #USE THIS ONLINE
   # covidData = reactive({
-  #   data = sourceDataNYT()
+  #   refreshData()
+  #   print("data updated")
   # 
+  #   data = read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv",
+  #                   stringsAsFactors = F)
   # 
   #   #Add the special cases
   #   data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
@@ -222,9 +249,24 @@ server <- function(input, output, session) {
   # 
   #   data  %>% select(-county, - state)
   # })
-
+  # 
+  # 
+  # # USE THIS ONLINE - Hospital data
+  # hospitalData = reactive({
+  #   refreshData()
+  #   test = GET("https://covidtracking.com/api/v1/states/daily.csv")
+  # 
+  #   req(status_code(test) == 200)
+  #   content(test) %>% mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>% 
+  #     left_join(popByState, by = c("state" = "State"))
+  # 
+  # })
+  
+  
+  
   updateTime = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
+  filterWarningTest = reactiveVal("")
   regionTest = reactiveVal("")
   
   #Update the time on the page
@@ -331,10 +373,9 @@ server <- function(input, output, session) {
      
   })
    
-  # ---- Generate plot 1----
-  #****************************
-  plot1 = reactive({
-
+  # ---- Generate Cases / Deaths plot ---
+  casesPlot = reactive({
+    
     startCases = ifelse(input$outcome == 1, 10, 1)
     
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
@@ -417,22 +458,20 @@ server <- function(input, output, session) {
   }) 
    
   # ---- Render the plot ----
-  #**************************
-  output$plot1 <- renderPlot({
+  output$casesPlot <- renderPlot({
     req(!is.null(input$region))
-    plot1() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 40)) 
+    casesPlot() + scale_color_discrete(labels = str_trunc(levels(plot.data()$region), 40)) 
      #If mobile, use statix width for plot, else dynamic 
   }, height = 600, width = function(){ifelse(input$isMobile, 1000, "auto")})
 
   
-  # ---- Download plot ----
-  #*************************
-  output$downloadPlot1 <- downloadHandler(
+  # ---- Download Cases/Deaths plot ----
+  output$downloadcasesPlot <- downloadHandler(
     filename = function() {
       paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
     },
     content = function(file) {
-      myPlot = plot1() +
+      myPlot = casesPlot() +
         labs(caption =  isolate(referenceUs()))
       ggsave(file, myPlot, width = 12, height = 7, device = "png")
 
@@ -440,11 +479,79 @@ server <- function(input, output, session) {
   )
   
   # ---- Warning message ----
-  #***************************
   #Warning when display after first 10 cases and regions don't have 10+
   output$filterWarnings = renderText({
     filterWarning()
   })
+   
+   
+   # ---- TESTING PLOT ----
+   #***********************
+  
+   testingData = reactive({
+     
+     req(!is.null(input$testState))
+     
+     #Filter the hospitalData based on user selections
+     myData = hospitalData() %>% filter(State_name %in% input$testState) %>% 
+       select(State_name, date, y = !!sym(input$testCurve), hospitalizedCurrently, inIcuCurrently, fips) %>% 
+       filter(y > 0)
+     
+     #If there is no data (e.g. 0 tests) warn the user and don't show line
+     noData = setdiff(input$testState, myData$State_name)
+     if(length(noData) > 0){
+       filterWarningTest(paste("The following states have no data:", paste(noData, collapse = ", ")))
+     }
+     
+     #Generate the plot
+     ggplot(myData, aes(x = date, y = y, color = State_name)) + 
+       geom_line(size = 1.2) + theme_bw() + scale_y_log10(labels = comma) +
+       #Add the latest counts at the end of the curve
+       geom_text(data = myData %>% group_by(State_name) %>% filter(date == first(date)), 
+                 aes(label = y, x = date, y = y), size = 5, check_overlap = F,hjust=0, vjust=0.5) +
+       #Update the labs based on the filters
+       labs(title = sprintf('%s COVID-19 tests',
+                            case_when(
+                              input$testCurve == "positive" ~ "Postive",
+                              input$testCurve == "negative" ~ "Negative",
+                              T ~ "All"
+                            )),
+            caption = isolate(referenceUs()))  +
+       xlab("Date") + ylab("Number of tests") +
+       coord_cartesian(clip = 'off') + #prevent clipping off labels
+       theme(plot.title = element_text(hjust = 0.0),
+             legend.position = 'right', legend.direction = "vertical",
+             legend.title = element_blank(),
+             panel.border = element_blank(),
+             plot.caption = element_text(hjust = 0.0, size = 14),
+             axis.line = element_line(colour = "black"),
+             text = element_text(size=20)) +
+       #Set the icons of the legend (looked weird)
+       guides(colour = guide_legend(override.aes = list(size=1.5, shape=95)))
+   })
+   
+   output$testPlot = renderPlot({
+     testingData()
+   }, height = 600, width = function(){ifelse(input$isMobile, 1000, "auto")})
+   
+   
+   # ---- Download testing plot ----
+   output$downloadTestPlot <- downloadHandler(
+     filename = function() {
+       paste("covid19watcher_TestingPlot_", as.integer(Sys.time()), ".png", sep="")
+     },
+     content = function(file) {
+       
+       ggsave(file, testingData(), width = 12, height = 7, device = "png")
+       
+     }
+   )
+   
+   # ---- Warning message ----
+   #Warning when no testing data
+   output$filterWarningsTest = renderText({
+     filterWarningTest()
+   })
 }
 
 shinyApp(ui = ui, server = server)
