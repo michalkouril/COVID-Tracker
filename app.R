@@ -228,7 +228,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
         ),
         #Add the logo
         tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
-                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"HeaderLogo.png\" height=\"40px\"></div>');"))
+                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.png\" height=\"40px\"></div>');"))
 )
 
 
