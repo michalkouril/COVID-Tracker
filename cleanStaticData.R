@@ -12,7 +12,7 @@ fipsData = fips_codes %>% mutate(fips = paste0(State_code, County_code))
 
 
 #Get population data per fips
-popData = read.csv("est2019-allData.csv") %>% 
+popData = read.csv("data/est2019-allData.csv") %>% 
   #Make sure the fips is a character with leading 0 is needed
   mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips))
   
@@ -20,7 +20,7 @@ popData = read.csv("est2019-allData.csv") %>%
 fipsData = fipsData %>% left_join(popData)
 
 #Load the region data and add the full FIPS
-metroData = read.xlsx("metro_fips_codes.xlsx") %>% 
+metroData = read.xlsx("data/metro_fips_codes.xlsx") %>% 
   mutate(fips = paste0(FIPS.State.Code, FIPS.County.Code)) %>% 
   select(-`County/County.Equivalent`, -FIPS.County.Code, -FIPS.State.Code, -State.Name)
   
@@ -59,7 +59,7 @@ fipsData[fipsData$FIPS == "17031", "POPESTIMATE2019"] = 9458539
 
 
 #Insert unknown counties
-unknownCounties = read.csv("unknownCounties.csv", stringsAsFactors = F, colClasses = "character")
+unknownCounties = read.csv("data/unknownCounties.csv", stringsAsFactors = F, colClasses = "character")
 
 unknownCounties = map_df(unknownCounties$stateName, function(myState){
   myState = unknownCounties %>% filter(stateName == myState)
@@ -75,4 +75,4 @@ fipsData = rbind(fipsData, unknownCounties)
 fipsData = fipsData %>% mutate(Country = "USA") %>% filter(County_code != "515", !is.na(POPESTIMATE2019))
 
 #Save
-write.csv(fipsData, "fipsData.csv", row.names = F)
+write.csv(fipsData, "data/fipsData.csv", row.names = F)
