@@ -229,6 +229,8 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
         #Add the logo
         tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
                        header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');")),
+        
+        #Edit the css to make logo appear well
         tags$head(tags$style(HTML("
           .navbar .container-fluid{
           background:linear-gradient(90deg, rgba(44,62,80,1) 0%, rgba(255,255,255,1) 65%, rgba(255,255,255,1) 100%);
@@ -237,7 +239,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
           background-color:#64717e;
           }
                         
-                                  ")))
+       ")))
 )
 
 
