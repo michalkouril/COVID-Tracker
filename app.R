@@ -53,6 +53,7 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                            test = GET(link)
                          }
                          
+                         #If local_data_only = T or data not accessible online, use local files
                          if(status_code(test) == 200){
                            data = read.csv(link, stringsAsFactors = F)
                            write.csv(data, "data/us-counties.csv", row.names = F)
@@ -73,6 +74,7 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                            data = GET("https://covidtracking.com/api/v1/states/daily.csv")
                          }
                          
+                         #If local_data_only = T or data not accessible online, use local files
                          if(status_code(data) == 200){
                            data = content(data)
                            write.csv(data, "data/hospitalData.csv", row.names = F)
