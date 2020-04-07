@@ -243,23 +243,10 @@ server <- function(input, output, session) {
   # 
   #   data = read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv",
   #                   stringsAsFactors = F)
-  # 
-  #   #Add the special cases
-  #   data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
-  #   data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
-  # 
-  #   data = data %>%
-  #     mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-  #            date = as.Date(date))
-  # 
-  #   #Add the unknow counties
-  #   data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
-  #   data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
-  # 
-  #   updateTime(as.character(max(data$date, na.rm = T)))
-  # 
-  #   data  %>% select(-county, - state)
-  # })
+  #
+  # #USE THIS DURING TESTING
+  # covidData = reactive({
+  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
   # 
   # 
   # # USE THIS ONLINE - Hospital data
@@ -277,8 +264,7 @@ server <- function(input, output, session) {
   # 
   # })
   
-  
-  
+
   updateTime = reactiveVal(Sys.time())
   updateTimeHospital = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
