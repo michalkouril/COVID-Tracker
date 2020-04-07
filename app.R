@@ -59,7 +59,7 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                            print("NYT data succesfully refreshed")
                            data
                          } else {
-                           print("NYT not accessible, stored data used")
+                           print("NYT not accessible online, local data used")
                            read.csv("data/us-counties.csv", stringsAsFactors = F)
                          }
                        })
@@ -79,7 +79,7 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                            print("covidProjectData data succesfully refreshed")
                            data
                          } else {
-                           print("covidProjectData not accessible, stored data used")
+                           print("covidProjectData not accessible online, local data used")
                            read.csv("data/hospitalData.csv", stringsAsFactors = F)
                          }
                        })
