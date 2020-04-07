@@ -131,7 +131,7 @@ mobileDetect <- function(inputId, value = 0) {
 # ---- UI ----
 #**************
 ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
-        title = div("COVID-19 Watcher"),
+        title = "COVID-19 Watcher",
         
         tabPanel("Cases/Deaths",
                sidebarLayout(  
