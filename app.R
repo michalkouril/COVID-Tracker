@@ -20,6 +20,10 @@ if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.or
 options(scipen=10000)
 Sys.setenv(TZ='America/New_York')
 
+# ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
+#**************************************************
+local_data_only = T
+
 
 # ---- Loading initial data----
 #******************************
@@ -38,8 +42,47 @@ popByState = fipsData %>% group_by(State_name, State) %>% summarise(population =
 popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
 popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
 
-#Reactive link to refresh data
-refreshData = reactiveTimer(3.6e+6)
+#Refresh the data every hour or used stored one if not possible 
+NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
+                       valueFunc = function() {
+                         
+                         if(local_data_only){
+                           test = 0
+                         } else {
+                           link = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
+                           test = GET(link)
+                         }
+                         
+                         if(status_code(test) == 200){
+                           data = read.csv(link, stringsAsFactors = F)
+                           write.csv(data, "us-counties.csv", row.names = F)
+                           print("NYT data succesfully refreshed")
+                           data
+                         } else {
+                           print("NYT not accessible, stored data used")
+                           read.csv("us-counties.csv", stringsAsFactors = F)
+                         }
+                       })
+
+covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
+                       valueFunc = function() {
+                         
+                         if(local_data_only){
+                           data = 0
+                         } else {
+                           data = GET("https://covidtracking.com/api/v1/states/daily.csv")
+                         }
+                         
+                         if(status_code(data) == 200){
+                           data = content(data)
+                           write.csv(data, "hospitalData.csv", row.names = F)
+                           print("covidProjectData data succesfully refreshed")
+                           data
+                         } else {
+                           print("covidProjectData not accessible, stored data used")
+                           read.csv("hospitalData.csv", stringsAsFactors = F)
+                         }
+                       })
 
 
 # ---- Functions ----
@@ -203,9 +246,10 @@ server <- function(input, output, session) {
                                "\nLast data update: ", isolate(updateTimeHospital()),
                                "\ncovid19watcher.research.cchmc.org", sep = ""))
   
-  #USE THIS DURING TESTING
+  #USE THIS ONLINE
   covidData = reactive({
-    data = read.csv("us-counties.csv", stringsAsFactors = F)
+    
+    data = NYTdata()
 
     #Add the special cases
     data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
@@ -225,44 +269,18 @@ server <- function(input, output, session) {
   })
 
 
-  #Hospital data based on Covi-Tracking project - https://covidtracking.com/about-project
+  # USE THIS ONLINE - Hospital data
   hospitalData = reactive({
-    data = read.csv("hospitalData.csv", stringsAsFactors = F) %>%
+    
+    data = covidProjectData() %>% 
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
       left_join(popByState, by = c("state" = "State"))
 
     updateTimeHospital(as.character(max(data$date, na.rm = T)))
 
     data
+
   })
-  
-  # #USE THIS ONLINE
-  # covidData = reactive({
-  #   refreshData()
-  #   print("data updated")
-  # 
-  #   data = read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv",
-  #                   stringsAsFactors = F)
-  #
-  # #USE THIS DURING TESTING
-  # covidData = reactive({
-  #   data = read.csv("us-counties.csv", stringsAsFactors = F)
-  # 
-  # 
-  # # USE THIS ONLINE - Hospital data
-  # hospitalData = reactive({
-  #   refreshData()
-  #   test = GET("https://covidtracking.com/api/v1/states/daily.csv")
-  # 
-  #   req(status_code(test) == 200)
-  #   data = content(test) %>% mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
-  #     left_join(popByState, by = c("state" = "State"))
-  # 
-  #   updateTimeHospital(as.character(max(data$date, na.rm = T)))
-  # 
-  #   data
-  # 
-  # })
   
 
   updateTime = reactiveVal(Sys.time())
