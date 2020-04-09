@@ -22,7 +22,7 @@ Sys.setenv(TZ='America/New_York')
 
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
-local_data_only = F
+local_data_only = T
 
 
 # ---- Loading initial data----
@@ -130,7 +130,7 @@ mobileDetect <- function(inputId, value = 0) {
 
 # ---- UI ----
 #**************
-ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
+ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         title = "COVID-19 Watcher",
         
         tabPanel("Cases/Deaths",
@@ -179,7 +179,7 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                                   inline = T),
                      tags$div(textOutput("filterWarningsTest"), style = "color: red;"),
                      br(),
-                     downloadButton("downloadTestPlot", "Download plot"),
+                     downloadButton("downloadTestPlot", "Download plot")
                    ),
                    mainPanel(
                      plotOutput(outputId = 'testPlot')
@@ -198,9 +198,9 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), HTML(paste0(a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget', target="_blank"), ".", sep = '')),
                    tags$br(),tags$b("Population estimates: "), HTML(paste0(a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau', target="_blank"), ".", sep = '')),
                    tags$br(),tags$b("COVID-19 Testing data: "), HTML(paste0(a(href='https://covidtracking.com/about-project','The COVID Tracking Project', target="_blank"), ".", sep = '')),
-                   tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', 
-                   tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and', 
-                   tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker', target="_blank"),', respectively.',
+                   tags$br(),tags$br(),HTML(paste0('Inspiration for the design of these charts and this dashboard was derived from ', 
+                   a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and ', 
+                   a(href='https://github.com/eparker12/nCoV_tracker','Edward Parker, PhD', target="_blank"),', respectively.', sep = '')),
                    tags$br(),tags$br(),tags$h4("Code"),
                    HTML(paste0("This is an open-source tool and suggestions for improvement are welcomed. Those interested in contributing to this site can access the code on ", 
                                a(href='https://github.com/wisselbd/COVID-Tracker','GitHub', target="_blank"), ". Major contributions will be acknowledged.", sep = '')),
@@ -217,29 +217,19 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
                    HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Chad Weis and ", 
                     a(href="https://www.cincinnatichildrens.org/bio/k/michal-kouril", "Michal Kouril, PhD", target="_blank"), 
-                    " for their help building the infrastructure for the site. ",
-                    "Thank you to Leighanne Toole for promoting and media relations, and ", 
+                    " for their help with building the infrastructure for the site; ",
+                    "Leighanne Toole for media relations and promotion; and ", 
                    a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
-                   " and Sander Su for their help lauching the beta version of this site.", sep = "")),
-                   " We have received excellent feedback from the academic community that has improved our presentation of the data, ",
-                   "especially from Samuel Keltner."
+                   " and Sander Su for their help launching the beta version of this site.", sep = "")),
+                   " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
+                   "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),tags$br()
                    
                  )
         ),
         #Add the logo
         tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
-                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');")),
-        
-        #Edit the css to make logo appear well
-        tags$head(tags$style(HTML("
-          .navbar .container-fluid{
-          background:linear-gradient(90deg, rgba(44,62,80,1) 0%, rgba(255,255,255,1) 65%, rgba(255,255,255,1) 100%);
-          }
-          .navbar-toggle {
-          background-color:#64717e;
-          }
-                        
-       ")))
+                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');"))
+
 )
 
 
@@ -250,14 +240,14 @@ server <- function(input, output, session) {
   referenceUs1 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
                       "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
-                      "\nLast data update: ", isolate(updateTime()),
-                      "\ncovid19watcher.research.cchmc.org", sep = ""))
+                      "\nShowing data through: ", isolate(updateTime()),
+                      "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
   
   referenceUs2 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                                "Data from 'The COVID Tracking Project'\n",
                                "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
-                               "\nLast data update: ", isolate(updateTimeHospital()),
-                               "\ncovid19watcher.research.cchmc.org", sep = ""))
+                               "\nShowing data through: ", isolate(updateTimeHospital()),
+                               "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
   
   #Load the NYT data
   covidData = reactive({
@@ -276,7 +266,7 @@ server <- function(input, output, session) {
     data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
     data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
 
-    updateTime(as.character(max(data$date, na.rm = T)))
+    updateTime(gsub("/0","/", gsub("^0","", as.character(max(data$date, na.rm = T) %>% format('%m/%d/%Y')))))
 
     data  %>% select(-county, - state)
   })
@@ -288,13 +278,14 @@ server <- function(input, output, session) {
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
       left_join(popByState, by = c("state" = "State"))
 
-    updateTimeHospital(as.character(max(data$date, na.rm = T)))
+    updateTimeHospital(gsub("/0","/", gsub("^0","", as.character(max(data$date, na.rm = T) %>% format('%m/%d/%Y')))))
 
     data
 
   })
   
 
+  #updateTime = reactiveVal(gsub("/0","/", gsub("^0","", as.character(Sys.time() %>% format('%m/%d/%Y')))))
   updateTime = reactiveVal(Sys.time())
   updateTimeHospital = reactiveVal(Sys.time())
   filterWarning = reactiveVal("")
