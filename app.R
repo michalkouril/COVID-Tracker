@@ -15,6 +15,7 @@ if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.u
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
 if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
 if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.org")
+if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -22,7 +23,7 @@ Sys.setenv(TZ='America/New_York')
 
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
-local_data_only = F
+local_data_only = T
 
 
 # ---- Loading initial data----
@@ -40,7 +41,7 @@ fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
 popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
 popByState = fipsData %>% group_by(State_name, State) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
 popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
+popByCounty = fipsData %>% select(stateCounty, FIPS, population = POPESTIMATE2019)
 
 #Refresh the data every hour or used stored one if not possible 
 NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
@@ -186,6 +187,17 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
                    )
                  )
         ),
+        tabPanel("Rankings",
+                 fluidRow(
+                   div(wellPanel(
+                     radioButtons("rankItem", NULL, inline = T, 
+                                  list("Cases" = "cases", "Deaths"= "deaths"))
+                   ), align = "center")
+                 ),
+                 fluidRow(DTOutput("rankingCounty")),
+                 fluidRow(DTOutput("rankingMetro")),
+                 fluidRow(DTOutput("rankingState"))
+                 ),
         tabPanel("About this site",
                  tags$div(
                    tags$h4("Last update"), 
@@ -574,6 +586,67 @@ server <- function(input, output, session) {
    #Warning when no testing data
    output$filterWarningsTest = renderText({
      filterWarningTest()
+   })
+   
+   
+   # ---- RANKING TABLES ----
+   #*************************
+   allRankingData = reactive({
+     latestDate = max(covidData()$date)
+     data = covidData() %>% filter(date == latestDate) %>% 
+       select(fips, cases, deaths)
+     
+     fipsData %>% left_join(data, by = c("FIPS" = "fips"))
+   })
+   
+   
+   countyTable = reactive({
+     print(input$rankItem)
+     rankItem = sym(input$rankItem)
+     
+     allRankingData() %>% filter(County != "Unknown", !is.na(!!rankItem)) %>%  
+     select(County, State_name, !!rankItem, FIPS) %>% 
+     left_join(popByCounty %>% select(-stateCounty), by = "FIPS") %>% 
+     mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+     select(-FIPS) %>% arrange(desc(!!rankItem))
+   })
+   
+   output$rankingCounty = renderDT({
+     datatable(countyTable(), rownames = F, 
+               options = list(pageLength = 10))
+   })
+   
+   metroTable = reactive({
+     rankItem = sym(input$rankItem)
+     
+     allData %>% filter(!is.na(CSA.Title), !is.na(!!rankItem)) %>%  
+     select(City = CSA.Title, !!rankItem) %>% 
+     group_by(City) %>% 
+     summarise(!!rankItem := sum(!!rankItem)) %>% 
+     left_join(popByMetro, by = c("City" = "CSA.Title")) %>% 
+     mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+     arrange(desc(!!rankItem))
+   })
+   
+   output$rankingMetro = renderDT({
+     datatable(metroTable(), rownames = F, 
+               options = list(pageLength = 10))
+   })
+   
+   stateTable = reactive({
+     rankItem = sym(input$rankItem)
+     
+     allData %>% filter(!is.na(!!rankItem)) %>%  
+     select(State, !!rankItem, ) %>% group_by(State) %>% 
+     summarise(!!rankItem := sum(!!rankItem)) %>% 
+     left_join(popByState, by = "State") %>% 
+     mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+     arrange(desc(!!rankItem))
+   })
+   
+   output$rankingState = renderDT({
+     datatable(stateTable(), rownames = F, 
+               options = list(pageLength = 10))
    })
 }
 
