@@ -24,7 +24,7 @@ Sys.setenv(TZ='America/New_York')
 
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
-local_data_only = F
+local_data_only = T
 
 
 # ---- Loading initial data----

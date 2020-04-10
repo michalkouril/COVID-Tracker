@@ -6,4 +6,8 @@
   gtag('js', new Date());
 
   gtag('config', 'UA-163373851-1');
+  
+  $(document).on('shiny:inputchanged', function(event) {
+    console.log(event.Event);
+  });
 </script>
