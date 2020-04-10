@@ -195,9 +195,12 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
                    ), align = "center")
                  ),
                  fluidRow(column(12, 
-                   div(HTML("<h5>You can filter and sort each column</h5>"), align = "center"),
+                   div(HTML("<h5>You can sort each column or search for an area of interest</h5>"), 
+                       align = "center"),
                   tabsetPanel(
-                   tabPanel("County",br(),DTOutput("rankingCounty")),
+                   tabPanel("County",br(),
+                            HTML("<i>NOTE: If your county is not listed, there is no data available</i><br><br>"),
+                            DTOutput("rankingCounty")),
                    tabPanel("City",br(),DTOutput("rankingMetro")),
                    tabPanel("State",br(),DTOutput("rankingState"))
                  )))
@@ -608,52 +611,56 @@ server <- function(input, output, session) {
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(County != "Unknown", !is.na(!!rankItem)) %>%  
-     select(County, State_name, !!rankItem, FIPS) %>% 
-     left_join(popByCounty %>% select(-stateCounty), by = "FIPS") %>% 
-     mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
-     select(-FIPS) %>% arrange(desc(!!rankItem))
+      select(County, State_name, !!rankItem, FIPS) %>% 
+      left_join(popByCounty %>% select(-stateCounty), by = "FIPS") %>% 
+      mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+      select(-FIPS) %>% arrange(desc(!!rankItem)) %>% ungroup() %>% 
+      mutate(Ranking = 1:n()) %>% select(Ranking, everything())
    })
    
    output$rankingCounty = renderDT({
      datatable(countyTable(), rownames = F, 
                options = list(pageLength = 10)) %>% 
-       formatCurrency(3:4, "", digits = 0)
+       formatCurrency(4:5, "", digits = 0)
    })
    
    metroTable = reactive({
      rankItem = sym(input$rankItem)
      
-     allData %>% filter(!is.na(CSA.Title), !is.na(!!rankItem)) %>%  
-     select(City = CSA.Title, !!rankItem) %>% 
-     group_by(City) %>% 
-     summarise(!!rankItem := sum(!!rankItem)) %>% 
-     left_join(popByMetro, by = c("City" = "CSA.Title")) %>% 
-     mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
-     arrange(desc(!!rankItem))
+     allRankingData() %>% filter(!is.na(CSA.Title), !is.na(!!rankItem)) %>%  
+      select(City = CSA.Title, !!rankItem) %>% 
+      group_by(City) %>% 
+      summarise(!!rankItem := sum(!!rankItem)) %>% 
+      left_join(popByMetro, by = c("City" = "CSA.Title")) %>% 
+      mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+      arrange(desc(!!rankItem)) %>% ungroup() %>% 
+      mutate(Ranking = 1:n()) %>% select(Ranking, everything())
    })
    
    output$rankingMetro = renderDT({
      datatable(metroTable(), rownames = F, 
                options = list(pageLength = 10)) %>% 
-       formatCurrency(2:3, "", digits = 0)
+       formatCurrency(3:4, "", digits = 0)
    })
    
    stateTable = reactive({
      rankItem = sym(input$rankItem)
      
-     allData %>% filter(!is.na(!!rankItem)) %>%  
-     select(State, !!rankItem, ) %>% group_by(State) %>% 
-     summarise(!!rankItem := sum(!!rankItem)) %>% 
-     left_join(popByState, by = "State") %>% 
-     mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
-     select(State, !!rankItem, population, per_10000) %>% 
-     arrange(desc(!!rankItem))
+     allRankingData() %>% filter(!is.na(!!rankItem)) %>%  
+      select(State, !!rankItem, ) %>% 
+      group_by(State) %>% 
+      summarise(!!rankItem := sum(!!rankItem)) %>% 
+      left_join(popByState, by = "State") %>% 
+      mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+      arrange(desc(!!rankItem)) %>% ungroup() %>% 
+      mutate(Ranking = 1:n(), State = sprintf("%s (%s)", State_name, State)) %>% 
+      select(Ranking, State, !!rankItem, population, per_10000)
    })
    
    output$rankingState = renderDT({
      datatable(stateTable(), rownames = F, 
                options = list(pageLength = 10)) %>% 
-       formatCurrency(2:3, "", digits = 0)
+       formatCurrency(3:4, "", digits = 0)
    })
 }
 
