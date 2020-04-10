@@ -24,7 +24,7 @@ Sys.setenv(TZ='America/New_York')
 
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
-local_data_only = F
+local_data_only = T
 
 
 # ---- Loading initial data----
@@ -132,7 +132,10 @@ mobileDetect <- function(inputId, value = 0) {
 
 # ---- UI ----
 #**************
-ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
+ui <- tagList(
+  # Add Google Analytics
+  tags$head(includeScript("google-analytics.html")),
+  navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         title = "COVID-19 Watcher",
         
         tabPanel("Cases/Deaths",
@@ -248,11 +251,9 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         ),
         #Add the logo
         tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
-                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');")),
+                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');"))
         
-        # Add Google Analytics
-        tags$head(includeScript("google-analytics.html"))
-)
+))
 
 
 # ---- SERVER ----
