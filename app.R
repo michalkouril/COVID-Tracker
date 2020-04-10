@@ -16,6 +16,7 @@ if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-projec
 if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
 if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.org")
 if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -38,10 +39,10 @@ unknownCounties = read.csv("data/unknownCounties.csv", stringsAsFactors = F, col
 fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
 
 #Get total population by region
-popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByState = fipsData %>% group_by(State_name, State) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByCounty = fipsData %>% select(stateCounty, FIPS, population = POPESTIMATE2019)
+popByCountry = fipsData %>% group_by(Country) %>% summarise(Population = sum(POPESTIMATE2019, na.rm = T))
+popByState = fipsData %>% group_by(State_name, State) %>% summarise(Population = sum(POPESTIMATE2019, na.rm = T))
+popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(Population = sum(POPESTIMATE2019, na.rm = T))
+popByCounty = fipsData %>% select(stateCounty, FIPS, Population = POPESTIMATE2019)
 
 #Refresh the data every hour or used stored one if not possible 
 NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
@@ -190,16 +191,16 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         tabPanel("Rankings",
                  fluidRow(
                    div(wellPanel(
-                     radioButtons("rankItem", "Choose an outcome", inline = T, 
-                                  list("Cases" = "cases", "Deaths"= "deaths"))
+                     radioButtons("rankItem", "Data", inline = T, 
+                                  list("Cases" = "Cases", "Deaths"= "Deaths"))
                    ), align = "center")
                  ),
                  fluidRow(column(12, 
-                   div(HTML("<h5>You can sort each column or search for an area of interest</h5>"), 
-                       align = "center"),
+                   # div(HTML("<h5>You can sort each column or search for an area of interest</h5>"), 
+                   #     align = "center"),
                   tabsetPanel(
                    tabPanel("County",br(),
-                            HTML("<i>NOTE: If your county is not listed, there is no data available</i><br><br>"),
+                            HTML("NOTE: If your county is not listed, there is no data available.<br><br>"),
                             DTOutput("rankingCounty")),
                    tabPanel("City",br(),DTOutput("rankingMetro")),
                    tabPanel("State",br(),DTOutput("rankingState"))
@@ -404,7 +405,7 @@ server <- function(input, output, session) {
      #When normalizing cases or deaths per 10,000 residents
      if(input$relPop == 1 && input$yScale == 1){
        plotData = plotData %>% 
-         mutate(y = y / (population / 10000))
+         mutate(y = y / (Population / 10000))
      }
      
      #Edit the order of the labels by descending y-value
@@ -428,7 +429,7 @@ server <- function(input, output, session) {
       
       #If the population is relative, make sure the guide is too (is average population of ones shown)
       pop = ifelse(F, 
-                   mean(plot.data() %>% group_by(region) %>% summarise(p = max(population)) %>% pull(p)),
+                   mean(plot.data() %>% group_by(region) %>% summarise(p = max(Population)) %>% pull(p)),
                    10000)
       
       
@@ -602,6 +603,7 @@ server <- function(input, output, session) {
      latestDate = max(covidData()$date)
      data = covidData() %>% filter(date == latestDate) %>% 
        select(fips, cases, deaths)
+     colnames(data)[colnames(data) %in% c('cases','deaths')] <- c('Cases', 'Deaths')
      
      fipsData %>% left_join(data, by = c("FIPS" = "fips"))
    })
@@ -611,16 +613,16 @@ server <- function(input, output, session) {
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(County != "Unknown", !is.na(!!rankItem)) %>%  
-      select(County, State_name, !!rankItem, FIPS) %>% 
+      select(County, State, !!rankItem, FIPS) %>% 
       left_join(popByCounty %>% select(-stateCounty), by = "FIPS") %>% 
-      mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
       select(-FIPS) %>% arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n()) %>% select(Ranking, everything())
+      mutate(Ranking = 1:n()) %>% select(Ranking, County, State, Population, !!rankItem, `Per 10,000 Residents`)
    })
    
    output$rankingCounty = renderDT({
      datatable(countyTable(), rownames = F, 
-               options = list(pageLength = 10)) %>% 
+               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
        formatCurrency(4:5, "", digits = 0)
    })
    
@@ -632,14 +634,14 @@ server <- function(input, output, session) {
       group_by(City) %>% 
       summarise(!!rankItem := sum(!!rankItem)) %>% 
       left_join(popByMetro, by = c("City" = "CSA.Title")) %>% 
-      mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
       arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n()) %>% select(Ranking, everything())
+      mutate(Ranking = 1:n()) %>% select(Ranking, City, Population, !!rankItem, `Per 10,000 Residents`) 
    })
    
    output$rankingMetro = renderDT({
      datatable(metroTable(), rownames = F, 
-               options = list(pageLength = 10)) %>% 
+               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
        formatCurrency(3:4, "", digits = 0)
    })
    
@@ -647,19 +649,19 @@ server <- function(input, output, session) {
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(!is.na(!!rankItem)) %>%  
-      select(State, !!rankItem, ) %>% 
+      select(State, !!rankItem) %>% 
       group_by(State) %>% 
       summarise(!!rankItem := sum(!!rankItem)) %>% 
       left_join(popByState, by = "State") %>% 
-      mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
       arrange(desc(!!rankItem)) %>% ungroup() %>% 
       mutate(Ranking = 1:n(), State = sprintf("%s (%s)", State_name, State)) %>% 
-      select(Ranking, State, !!rankItem, population, per_10000)
+      select(Ranking, State, Population, !!rankItem, `Per 10,000 Residents`) 
    })
    
    output$rankingState = renderDT({
      datatable(stateTable(), rownames = F, 
-               options = list(pageLength = 10)) %>% 
+               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
        formatCurrency(3:4, "", digits = 0)
    })
 }
