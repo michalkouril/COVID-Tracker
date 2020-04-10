@@ -190,13 +190,17 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         tabPanel("Rankings",
                  fluidRow(
                    div(wellPanel(
-                     radioButtons("rankItem", NULL, inline = T, 
+                     radioButtons("rankItem", "Choose an outcome", inline = T, 
                                   list("Cases" = "cases", "Deaths"= "deaths"))
                    ), align = "center")
                  ),
-                 fluidRow(DTOutput("rankingCounty")),
-                 fluidRow(DTOutput("rankingMetro")),
-                 fluidRow(DTOutput("rankingState"))
+                 fluidRow(column(12, 
+                   div(HTML("<h5>You can filter and sort each column</h5>"), align = "center"),
+                  tabsetPanel(
+                   tabPanel("County",br(),DTOutput("rankingCounty")),
+                   tabPanel("City",br(),DTOutput("rankingMetro")),
+                   tabPanel("State",br(),DTOutput("rankingState"))
+                 )))
                  ),
         tabPanel("About this site",
                  tags$div(
@@ -601,7 +605,6 @@ server <- function(input, output, session) {
    
    
    countyTable = reactive({
-     print(input$rankItem)
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(County != "Unknown", !is.na(!!rankItem)) %>%  
@@ -613,7 +616,8 @@ server <- function(input, output, session) {
    
    output$rankingCounty = renderDT({
      datatable(countyTable(), rownames = F, 
-               options = list(pageLength = 10))
+               options = list(pageLength = 10)) %>% 
+       formatCurrency(3:4, "", digits = 0)
    })
    
    metroTable = reactive({
@@ -630,7 +634,8 @@ server <- function(input, output, session) {
    
    output$rankingMetro = renderDT({
      datatable(metroTable(), rownames = F, 
-               options = list(pageLength = 10))
+               options = list(pageLength = 10)) %>% 
+       formatCurrency(2:3, "", digits = 0)
    })
    
    stateTable = reactive({
@@ -641,12 +646,14 @@ server <- function(input, output, session) {
      summarise(!!rankItem := sum(!!rankItem)) %>% 
      left_join(popByState, by = "State") %>% 
      mutate(per_10000 = round(!!rankItem / (population / 10000), 2)) %>% 
+     select(State, !!rankItem, population, per_10000) %>% 
      arrange(desc(!!rankItem))
    })
    
    output$rankingState = renderDT({
      datatable(stateTable(), rownames = F, 
-               options = list(pageLength = 10))
+               options = list(pageLength = 10)) %>% 
+       formatCurrency(2:3, "", digits = 0)
    })
 }
 
