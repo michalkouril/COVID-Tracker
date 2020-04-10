@@ -24,7 +24,7 @@ Sys.setenv(TZ='America/New_York')
 
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
-local_data_only = F
+local_data_only = T
 
 
 # ---- Loading initial data----
@@ -176,12 +176,15 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
                                  choices = popByState$State_name, 
                                  multiple = T, selectize = T, selected = "Ohio"
                      ),
-                     radioButtons("testCurve", "COVID-19 tests", 
-                                  list("Positive" = "positive", "Negative" = "negative", "All" = "totalTestResults"), 
-                                  inline = T),
+                     checkboxGroupInput("testCurve", "Tests", 
+                                  list("Positive" = "positive", "Negative" = "negative", "Total" = "posNeg"), 
+                                  inline = T, selected = c("posNeg", "positive")),
+                     radioButtons("relPopTests", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2),
                      tags$div(textOutput("filterWarningsTest"), style = "color: red;"),
                      br(),
-                     downloadButton("downloadTestPlot", "Download plot")
+                     downloadButton("downloadTestPlot", "Download plot"),
+                     tags$br(),tags$br(), HTML(paste0("Note: The reliability of these data varies considerably between each state. Please visit ",
+                                                      a(href='https://covidtracking.com/about-data','The COVID Tracking Project', target="_blank"), "'s website for more information.", sep = ''))                          
                    ),
                    mainPanel(
                      plotOutput(outputId = 'testPlot')
@@ -296,11 +299,16 @@ server <- function(input, output, session) {
     
     data = covidProjectData() %>% 
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
-      left_join(popByState, by = c("state" = "State"))
+      left_join(popByState, by = c("state" = "State")) %>% select('State_name','Population','posNeg','positive','negative','date') %>%
+      gather('category','count',-State_name, -Population,-date)
 
     updateTimeHospital(gsub("/0","/", gsub("^0","", as.character(max(data$date, na.rm = T) %>% format('%m/%d/%Y')))))
-
-    data
+    
+    #Edit the order of the labels by descending y-value
+    myOrder = data %>% group_by(State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
+    data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
+    
+    data %>% ungroup()
 
   })
   
@@ -536,9 +544,15 @@ server <- function(input, output, session) {
      req(!is.null(input$testState))
      
      #Filter the hospitalData based on user selections
-     myData = hospitalData() %>% filter(State_name %in% input$testState) %>% 
-       select(State_name, date, y = !!sym(input$testCurve), hospitalizedCurrently, inIcuCurrently, fips) %>% 
-       filter(y > 0)
+     myData = hospitalData() %>% filter(State_name %in% input$testState) %>% filter(category %in% input$testCurve) %>%
+       #select(State_name, date, y = !!sym(input$testCurve)) %>% 
+       filter(count > 0)
+     
+     #When normalizing for tests per 10,000 residents
+     if(input$relPopTests == 1){
+       myData = myData %>% 
+         mutate(count = count / (Population / 10000))
+     }
      
      #If there is no data (e.g. 0 tests) warn the user and don't show line
      noData = setdiff(input$testState, myData$State_name)
@@ -546,21 +560,28 @@ server <- function(input, output, session) {
        filterWarningTest(paste("The following states have no data:", paste(noData, collapse = ", ")))
      }
      
+     # Change the y-axis label if adjusting for population
+     yLabelTests = ifelse(input$relPopTests == 1 , "Numbers of Tests per 10,000 Residents", "Number of Tests")
+     
      #Generate the plot
-     ggplot(myData, aes(x = date, y = y, color = State_name)) + 
-       geom_line(size = 1.2) + theme_bw() + scale_y_log10(labels = comma) +
-       #Add the latest counts at the end of the curve
+     ggplot(myData, aes(x = date, y = count, color = State_name, linetype = category)) + 
+       geom_line(size = 1.2) + theme_bw() + 
+       scale_linetype(breaks = c("posNeg", "negative", "positive"),
+                           labels = c("Total", "Negative", "Positive")) +
+      #Add the latest counts at the end of the curve
        geom_text(data = myData %>% group_by(State_name) %>% filter(date == first(date)), 
-                 aes(label = y, x = date, y = y), size = 5, check_overlap = F,hjust=0, vjust=0.5) +
+                 aes(label = if(input$relPopTests == 1){format(round(count, 2), big.mark = ",", nsmall = 2)} else 
+                 {format(round(count, 0), big.mark = ",", nsmall = 0)}, x = date, y = count), size = 5, check_overlap = F,hjust=0, vjust=0.5) +
        #Update the labs based on the filters
-       labs(title = sprintf('%s COVID-19 tests',
-                            case_when(
-                              input$testCurve == "positive" ~ "Postive",
-                              input$testCurve == "negative" ~ "Negative",
-                              T ~ "All"
-                            )),
+       # labs(title = sprintf('%s COVID-19 tests',
+       #                      case_when(
+       #                        input$testCurve == "positive" ~ "Postive",
+       #                        input$testCurve == "negative" ~ "Negative",
+       #                        T ~ "All"
+       #                      )),
+       labs(title = 'COVID-19 Testing Volume',
             caption = isolate(referenceUs2()))  +
-       xlab("Date") + ylab("Number of tests") +
+       xlab("Date") + ylab(yLabelTests) +
        coord_cartesian(clip = 'off') + #prevent clipping off labels
        theme(plot.title = element_text(hjust = 0.0),
              legend.position = 'right', legend.direction = "vertical",
