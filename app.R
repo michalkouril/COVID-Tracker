@@ -25,7 +25,7 @@ Sys.setenv(TZ='America/New_York')
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
 use_online_data = T
-use_google_analytics = F
+use_google_analytics = T
 
 
 # ---- Loading initial data----
