@@ -299,7 +299,8 @@ server <- function(input, output, session) {
     
     data = covidProjectData() %>% 
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
-      left_join(popByState, by = c("state" = "State")) %>% select('State_name','Population','posNeg','positive','negative','date') %>%
+      left_join(popByState, by = c("state" = "State")) %>% 
+      select('State_name','Population','posNeg','positive','negative','date') %>%
       gather('category','count',-State_name, -Population,-date)
 
     updateTimeHospital(gsub("/0","/", gsub("^0","", as.character(max(data$date, na.rm = T) %>% format('%m/%d/%Y')))))
@@ -307,7 +308,7 @@ server <- function(input, output, session) {
     #Edit the order of the labels by descending y-value
     myOrder = data %>% group_by(State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
     data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
-    
+
     data %>% ungroup()
 
   })
@@ -484,7 +485,7 @@ server <- function(input, output, session) {
       geom_text(data = plot.data() %>% filter(date == last(date)), 
                 aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
                   {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
-                    x = x, y = y), size = 4, check_overlap = T,hjust=0, vjust=0.5) +
+                    x = x, y = y), size = 5, check_overlap = T,hjust=0, vjust=0.5) +
       #Update the labs based on the filters
       labs(title = sprintf('COVID-19 %s in %s', 
                            ifelse(input$outcome == 1, "Cases", "Deaths"),
@@ -501,6 +502,8 @@ server <- function(input, output, session) {
             legend.position = 'right', legend.direction = "vertical", 
             legend.title = element_blank(), 
             panel.border = element_blank(),
+            legend.margin = margin(0,0,0,20),
+            legend.background = element_blank(),
             plot.caption = element_text(hjust = 0.0, size = 14),
             axis.line = element_line(colour = "black"),
             text = element_text(size=20)) +
@@ -544,7 +547,8 @@ server <- function(input, output, session) {
      req(!is.null(input$testState))
      
      #Filter the hospitalData based on user selections
-     myData = hospitalData() %>% filter(State_name %in% input$testState) %>% filter(category %in% input$testCurve) %>%
+     myData = hospitalData() %>% filter(State_name %in% input$testState) %>% 
+       filter(category %in% input$testCurve) %>%
        #select(State_name, date, y = !!sym(input$testCurve)) %>% 
        filter(count > 0)
      
@@ -566,7 +570,8 @@ server <- function(input, output, session) {
      #Generate the plot
      ggplot(myData, aes(x = date, y = count, color = State_name, linetype = category)) + 
        geom_line(size = 1.2) + theme_bw() + 
-       scale_linetype(breaks = c("posNeg", "negative", "positive"),
+       scale_linetype_manual(values = c("solid", "dashed", "dotted"),
+                            breaks = c("posNeg", "negative", "positive"),
                            labels = c("Total", "Negative", "Positive")) +
       #Add the latest counts at the end of the curve
        geom_text(data = myData %>% group_by(State_name) %>% filter(date == first(date)), 
@@ -586,6 +591,8 @@ server <- function(input, output, session) {
        theme(plot.title = element_text(hjust = 0.0),
              legend.position = 'right', legend.direction = "vertical",
              legend.title = element_blank(),
+             legend.margin = margin(0,0,0,20),
+             legend.background = element_blank(),
              panel.border = element_blank(),
              plot.caption = element_text(hjust = 0.0, size = 14),
              axis.line = element_line(colour = "black"),
