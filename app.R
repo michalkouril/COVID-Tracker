@@ -24,7 +24,8 @@ Sys.setenv(TZ='America/New_York')
 
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
-local_data_only = F
+use_online_data = T
+use_google_analytics = F
 
 
 # ---- Loading initial data----
@@ -48,14 +49,14 @@ popByCounty = fipsData %>% select(stateCounty, FIPS, Population = POPESTIMATE201
 NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
                        valueFunc = function() {
                          
-                         if(local_data_only){
+                         if(!use_online_data){
                            test = 0
                          } else {
                            link = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
                            test = GET(link)
                          }
                          
-                         #If local_data_only = T or data not accessible online, use local files
+                         #If use_online_data = F or data not accessible online, use local files
                          if(status_code(test) == 200){
                            data = read.csv(link, stringsAsFactors = F)
                            write.csv(data, "data/us-counties.csv", row.names = F)
@@ -70,13 +71,13 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
 covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
                        valueFunc = function() {
                          
-                         if(local_data_only){
+                         if(!use_online_data){
                            data = 0
                          } else {
                            data = GET("https://covidtracking.com/api/v1/states/daily.csv")
                          }
                          
-                         #If local_data_only = T or data not accessible online, use local files
+                         #If use_online_data = F or data not accessible online, use local files
                          if(status_code(data) == 200){
                            data = content(data)
                            write.csv(data, "data/hospitalData.csv", row.names = F)
@@ -134,7 +135,7 @@ mobileDetect <- function(inputId, value = 0) {
 #**************
 ui <- tagList(
   # Add Google Analytics
-  if(!local_data_only){
+  if(use_google_analytics){
     tags$head(includeHTML("google-analytics.html"))
   },
   navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
