@@ -226,7 +226,7 @@ ui <- tagList(
         tabPanel("About this site",
                  tags$div(
                    tags$h4("Last update"), 
-                   textOutput("updateTime"), 'Data updated daily',
+                   textOutput("updateTime"), 'Data updated daily.',
                    tags$br(),tags$br(),tags$h4("Summary"),
                    "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
                    "As the coronavirus continues to spread throughout the U.S., thousands of people from across the country have used this dashboard to understand how the virus is impacting their community. Users can compare cities to watch the effects of shelter-in-place orders and gain insights on what may come next.",
