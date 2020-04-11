@@ -29,16 +29,10 @@ if(Sys.getenv("SHINY_PORT") == ""){
   print("LOCAL MODE")
   use_online_data = F
   use_google_analytics = F
-} else if(Sys.info()["nodename"] == "95a3a32f4257") {
-  #Master site
-  print("MASTER MODE")
+} else {
+  print("ONLINE MODE")
   use_online_data = T
   use_google_analytics = T
-} else {
-  #Dev site
-  print("DEV MODE")
-  use_online_data = T
-  use_google_analytics = F
 }
 
 
