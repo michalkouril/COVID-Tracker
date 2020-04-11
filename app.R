@@ -22,10 +22,24 @@ if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.
 options(scipen=10000)
 Sys.setenv(TZ='America/New_York')
 
-# ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
-#**************************************************
-use_online_data = T
-use_google_analytics = T
+# ---- Using online data and Google Analytics ? ----
+#*************************************************
+if(Sys.getenv("SHINY_PORT") == ""){
+  #Working locally in RStudio
+  print("LOCAL MODE")
+  use_online_data = F
+  use_google_analytics = F
+} else if(Sys.info()["nodename"] == "95a3a32f4257") {
+  #Master site
+  print("MASTER MODE")
+  use_online_data = T
+  use_google_analytics = T
+} else {
+  #Dev site
+  print("DEV MODE")
+  use_online_data = T
+  use_google_analytics = F
+}
 
 
 # ---- Loading initial data----
@@ -214,7 +228,6 @@ ui <- tagList(
                  ),
         tabPanel("About this site",
                  tags$div(
-                   Sys.getenv("SHINY_PORT"), Sys.info()["nodename"],
                    tags$h4("Last update"), 
                    textOutput("updateTime"), 'Data updated daily',
                    tags$br(),tags$br(),tags$h4("Summary"),
@@ -249,7 +262,8 @@ ui <- tagList(
                    a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
                    " and Sander Su for their help launching the beta version of this site.", sep = "")),
                    " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
-                   "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),tags$br()
+                   "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),
+                   HTML(sprintf('<font color="white">%s</font>',Sys.info()["nodename"]))
                    
                  )
         ),
