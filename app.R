@@ -259,7 +259,7 @@ ui <- tagList(
                    " and Sander Su for their help launching the beta version of this site.", sep = "")),
                    " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
                    "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),
-                   HTML(sprintf('<font color="white">%s</font>',Sys.info()["nodename"]))
+                   HTML(sprintf('<font color="white">%s</font>',paste(Sys.info(), collapse = "; ")["nodename"]))
                    
                  )
         ),
