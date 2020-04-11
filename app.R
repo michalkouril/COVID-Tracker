@@ -576,14 +576,9 @@ server <- function(input, output, session) {
       #Add the latest counts at the end of the curve
        geom_text(data = myData %>% group_by(State_name) %>% filter(date == first(date)), 
                  aes(label = if(input$relPopTests == 1){format(round(count, 2), big.mark = ",", nsmall = 2)} else 
-                 {format(round(count, 0), big.mark = ",", nsmall = 0)}, x = date, y = count), size = 5, check_overlap = F,hjust=0, vjust=0.5) +
-       #Update the labs based on the filters
-       # labs(title = sprintf('%s COVID-19 tests',
-       #                      case_when(
-       #                        input$testCurve == "positive" ~ "Postive",
-       #                        input$testCurve == "negative" ~ "Negative",
-       #                        T ~ "All"
-       #                      )),
+                 {format(round(count, 0), big.mark = ",", nsmall = 0)}, x = date, y = count), size = 5, 
+                 check_overlap = T,hjust=0, vjust=0.5) +
+       scale_y_continuous(labels = comma) +
        labs(title = 'COVID-19 Testing Volume',
             caption = isolate(referenceUs2()))  +
        xlab("Date") + ylab(yLabelTests) +
