@@ -22,9 +22,24 @@ if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.
 options(scipen=10000)
 Sys.setenv(TZ='America/New_York')
 
-# ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
-#**************************************************
-local_data_only = T
+# ---- Using online data and Google Analytics ? ----
+#*************************************************
+if(Sys.getenv("SHINY_PORT") == ""){
+  #Working locally in RStudio
+  print("LOCAL MODE")
+  use_online_data = F
+  use_google_analytics = F
+} else if(Sys.info()["nodename"] == "95a3a32f4257") {
+  #Master site
+  print("MASTER MODE")
+  use_online_data = T
+  use_google_analytics = T
+} else {
+  #Dev site
+  print("DEV MODE")
+  use_online_data = T
+  use_google_analytics = F
+}
 
 
 # ---- Loading initial data----
@@ -48,14 +63,14 @@ popByCounty = fipsData %>% select(stateCounty, FIPS, Population = POPESTIMATE201
 NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
                        valueFunc = function() {
                          
-                         if(local_data_only){
+                         if(!use_online_data){
                            test = 0
                          } else {
                            link = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
                            test = GET(link)
                          }
                          
-                         #If local_data_only = T or data not accessible online, use local files
+                         #If use_online_data = F or data not accessible online, use local files
                          if(status_code(test) == 200){
                            data = read.csv(link, stringsAsFactors = F)
                            write.csv(data, "data/us-counties.csv", row.names = F)
@@ -70,13 +85,13 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
 covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
                        valueFunc = function() {
                          
-                         if(local_data_only){
+                         if(!use_online_data){
                            data = 0
                          } else {
                            data = GET("https://covidtracking.com/api/v1/states/daily.csv")
                          }
                          
-                         #If local_data_only = T or data not accessible online, use local files
+                         #If use_online_data = F or data not accessible online, use local files
                          if(status_code(data) == 200){
                            data = content(data)
                            write.csv(data, "data/hospitalData.csv", row.names = F)
@@ -132,7 +147,12 @@ mobileDetect <- function(inputId, value = 0) {
 
 # ---- UI ----
 #**************
-ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
+ui <- tagList(
+  # Add Google Analytics
+  if(use_google_analytics){
+    tags$head(includeHTML("google-analytics.html"))
+  },
+  navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         title = "COVID-19 Watcher",
         
         tabPanel("Cases/Deaths",
@@ -212,7 +232,7 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         tabPanel("About this site",
                  tags$div(
                    tags$h4("Last update"), 
-                   textOutput("updateTime"), 'Data updated daily.',
+                   textOutput("updateTime"), 'Data updated daily',
                    tags$br(),tags$br(),tags$h4("Summary"),
                    "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
                    "As the coronavirus continues to spread throughout the U.S., thousands of people from across the country have used this dashboard to understand how the virus is impacting their community. Users can compare cities to watch the effects of shelter-in-place orders and gain insights on what may come next.",
@@ -245,15 +265,16 @@ ui <- navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
                    a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
                    " and Sander Su for their help launching the beta version of this site.", sep = "")),
                    " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
-                   "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),tags$br()
+                   "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),
+                   HTML(sprintf('<font color="white">%s</font>',Sys.info()["nodename"]))
                    
                  )
         ),
         #Add the logo
         tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
                        header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');"))
-
-)
+        
+))
 
 
 # ---- SERVER ----
