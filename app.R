@@ -214,6 +214,7 @@ ui <- tagList(
                  ),
         tabPanel("About this site",
                  tags$div(
+                   Sys.getenv("SHINY_PORT"), Sys.info()["nodename"],
                    tags$h4("Last update"), 
                    textOutput("updateTime"), 'Data updated daily',
                    tags$br(),tags$br(),tags$h4("Summary"),
