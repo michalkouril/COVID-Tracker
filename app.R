@@ -24,7 +24,7 @@ Sys.setenv(TZ='America/New_York')
 
 # ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
 #**************************************************
-local_data_only = F
+local_data_only = T
 
 
 # ---- Loading initial data----
@@ -134,7 +134,9 @@ mobileDetect <- function(inputId, value = 0) {
 #**************
 ui <- tagList(
   # Add Google Analytics
-  tags$head(includeHTML("google-analytics.html")),
+  if(!local_data_only){
+    tags$head(includeHTML("google-analytics.html"))
+  },
   navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         title = "COVID-19 Watcher",
         
