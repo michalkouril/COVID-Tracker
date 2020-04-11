@@ -575,10 +575,14 @@ server <- function(input, output, session) {
      
      #If there is no data (e.g. 0 tests) warn the user and don't show line
      noData = setdiff(input$testState, myData$State_name)
-     if(length(noData) > 0){
+     if(nrow(myData) == 0){
+       filterWarningTest("No test were selected")
+     } else if(length(noData) > 0){
        filterWarningTest(paste("The following states have no data:", paste(noData, collapse = ", ")))
+     } else { 
+       filterWarningTest("")
      }
-     
+     myData$category = as.factor(myData$category )
      # Change the y-axis label if adjusting for population
      yLabelTests = ifelse(input$relPopTests == 1 , "Numbers of Tests per 10,000 Residents", "Number of Tests")
      
