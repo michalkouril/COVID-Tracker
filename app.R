@@ -36,6 +36,7 @@ if(Sys.getenv("SHINY_PORT") == ""){
   use_google_analytics = F
 } 
 
+
 # ---- Loading initial data----
 #******************************
 
