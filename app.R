@@ -15,14 +15,26 @@ if(!require(shinythemes)) install.packages("shinythemes", repos = "http://cran.u
 if(!require(scales)) install.packages("scales", repos = "http://cran.us.r-project.org")
 if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
 if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.org")
+if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(tidyr)) install.packages("tidyr", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
 Sys.setenv(TZ='America/New_York')
 
-# ---- TESTING THE SCRIPT WITH LOCAL DATA ONLY ?? ----
-#**************************************************
-local_data_only = F
+# ---- Using online data and Google Analytics ? ----
+#*************************************************
+if(Sys.getenv("SHINY_PORT") == ""){
+  #Working locally in RStudio
+  print("LOCAL MODE")
+  use_online_data = F
+  use_google_analytics = F
+} else{
+  print("ONLINE MODE")
+  use_online_data = T
+  use_google_analytics = T
+} 
 
 
 # ---- Loading initial data----
@@ -37,23 +49,23 @@ unknownCounties = read.csv("data/unknownCounties.csv", stringsAsFactors = F, col
 fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
 
 #Get total population by region
-popByCountry = fipsData %>% group_by(Country) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByState = fipsData %>% group_by(State_name, State) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(population = sum(POPESTIMATE2019, na.rm = T))
-popByCounty = fipsData %>% select(stateCounty, population = POPESTIMATE2019)
+popByCountry = fipsData %>% group_by(Country) %>% summarise(Population = sum(POPESTIMATE2019, na.rm = T))
+popByState = fipsData %>% group_by(State_name, State) %>% summarise(Population = sum(POPESTIMATE2019, na.rm = T))
+popByMetro = fipsData %>% group_by(CSA.Title) %>% summarise(Population = sum(POPESTIMATE2019, na.rm = T))
+popByCounty = fipsData %>% select(stateCounty, FIPS, Population = POPESTIMATE2019)
 
 #Refresh the data every hour or used stored one if not possible 
 NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
                        valueFunc = function() {
                          
-                         if(local_data_only){
+                         if(!use_online_data){
                            test = 0
                          } else {
                            link = "https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv"
                            test = GET(link)
                          }
                          
-                         #If local_data_only = T or data not accessible online, use local files
+                         #If use_online_data = F or data not accessible online, use local files
                          if(status_code(test) == 200){
                            data = read.csv(link, stringsAsFactors = F)
                            write.csv(data, "data/us-counties.csv", row.names = F)
@@ -68,13 +80,13 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
 covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = function() {Sys.time()}, 
                        valueFunc = function() {
                          
-                         if(local_data_only){
+                         if(!use_online_data){
                            data = 0
                          } else {
                            data = GET("https://covidtracking.com/api/v1/states/daily.csv")
                          }
                          
-                         #If local_data_only = T or data not accessible online, use local files
+                         #If use_online_data = F or data not accessible online, use local files
                          if(status_code(data) == 200){
                            data = content(data)
                            write.csv(data, "data/hospitalData.csv", row.names = F)
@@ -127,10 +139,20 @@ mobileDetect <- function(inputId, value = 0) {
   )
 }
 
+prettyDate = function(date){
+  gsub("/0","/", gsub("^0","", 
+        as.character(as.Date(date) %>% format('%m/%d/%Y'))))
+}
+
 
 # ---- UI ----
 #**************
-ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
+ui <- tagList(
+  # Add Google Analytics
+  if(use_google_analytics){
+    tags$head(includeHTML("google-analytics.html"))
+  },
+  navbarPage(theme = shinytheme("paper"), collapsible = TRUE, id="nav",
         title = "COVID-19 Watcher",
         
         tabPanel("Cases/Deaths",
@@ -174,22 +196,45 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                                  choices = popByState$State_name, 
                                  multiple = T, selectize = T, selected = "Ohio"
                      ),
-                     radioButtons("testCurve", "COVID-19 tests", 
-                                  list("Positive" = "positive", "Negative" = "negative", "All" = "totalTestResults"), 
-                                  inline = T),
+                     checkboxGroupInput("testCurve", "Tests", 
+                                  list("Positive" = "positive", "Negative" = "negative", "Total" = "posNeg"), 
+                                  inline = T, selected = c("posNeg", "positive")),
+                     radioButtons("relPopTests", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2),
                      tags$div(textOutput("filterWarningsTest"), style = "color: red;"),
                      br(),
                      downloadButton("downloadTestPlot", "Download plot"),
+                     tags$br(),tags$br(), HTML(paste0("Note: The reliability of these data varies considerably between each state. Please visit ",
+                                                      a(href='https://covidtracking.com/about-data','The COVID Tracking Project', target="_blank"), "'s website for more information.", sep = ''))                          
                    ),
                    mainPanel(
                      plotOutput(outputId = 'testPlot')
                    )
                  )
         ),
+        tabPanel("Rankings",
+                 fluidRow(
+                   div(wellPanel(
+                     radioButtons("rankItem", "Data", inline = T, 
+                                  list("Cases" = "Cases", "Deaths"= "Deaths"))
+                   ), align = "center")
+                 ),
+                 fluidRow(column(12, 
+                   # div(HTML("<h5>You can sort each column or search for an area of interest</h5>"), 
+                   #     align = "center"),
+                  tabsetPanel(
+                   tabPanel("County",br(),
+                            HTML("NOTE: If your county is not listed, there is no data available.<br><br>"),
+                            DTOutput("rankingCounty")),
+                   tabPanel("City",br(),DTOutput("rankingMetro")),
+                   tabPanel("State",br(),DTOutput("rankingState"))
+                 )))
+                 ),
         tabPanel("About this site",
                  tags$div(
-                   tags$h4("Last update"), 
-                   textOutput("updateTime"), 'Data updated daily.',
+                   tags$h4("Last Updates"), 
+                   "NYT Data:", textOutput("updateTime", inline = T), br(),
+                   "COVID-Project Data:", textOutput("updateTimeHospital", inline = T), br(),
+                   HTML('App:&nbsp'), prettyDate(file.info("app.R")$mtime),
                    tags$br(),tags$br(),tags$h4("Summary"),
                    "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
                    "As the coronavirus continues to spread throughout the U.S., thousands of people from across the country have used this dashboard to understand how the virus is impacting their community. Users can compare cities to watch the effects of shelter-in-place orders and gain insights on what may come next.",
@@ -198,9 +243,9 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                    tags$br(),tags$b("U.S. metropolitan area definitions: "), HTML(paste0(a(href='https://www.census.gov/programs-surveys/metro-micro.html','The United States Office of Management and Budget', target="_blank"), ".", sep = '')),
                    tags$br(),tags$b("Population estimates: "), HTML(paste0(a(href='https://www.census.gov/data/datasets/time-series/demo/popest/2010s-counties-total.html#par_textimage_70769902','The United States Census Bureau', target="_blank"), ".", sep = '')),
                    tags$br(),tags$b("COVID-19 Testing data: "), HTML(paste0(a(href='https://covidtracking.com/about-project','The COVID Tracking Project', target="_blank"), ".", sep = '')),
-                   tags$br(),tags$br(),'Inspiration for the design of these charts and this dashboard was derived from', 
-                   tags$a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and', 
-                   tags$a(href='https://github.com/eparker12/nCoV_tracker','Dr. Edward Parker', target="_blank"),', respectively.',
+                   tags$br(),tags$br(),HTML(paste0('Inspiration for the design of these charts and this dashboard was derived from ', 
+                   a(href='https://twitter.com/jburnmurdoch','John Burn-Murdoch', target="_blank"),' and ', 
+                   a(href='https://github.com/eparker12/nCoV_tracker','Edward Parker, PhD', target="_blank"),', respectively.', sep = '')),
                    tags$br(),tags$br(),tags$h4("Code"),
                    HTML(paste0("This is an open-source tool and suggestions for improvement are welcomed. Those interested in contributing to this site can access the code on ", 
                                a(href='https://github.com/wisselbd/COVID-Tracker','GitHub', target="_blank"), ". Major contributions will be acknowledged.", sep = '')),
@@ -217,47 +262,44 @@ ui <- navbarPage(theme = shinytheme("flatly"), collapsible = TRUE, id="nav",
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
                    HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Chad Weis and ", 
                     a(href="https://www.cincinnatichildrens.org/bio/k/michal-kouril", "Michal Kouril, PhD", target="_blank"), 
-                    " for their help building the infrastructure for the site. ",
-                    "Thank you to Leighanne Toole for promoting and media relations, and ", 
+                    " for their help with building the infrastructure for the site; ",
+                    "Leighanne Toole for media relations and promotion; and ", 
                    a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
-                   " and Sander Su for their help lauching the beta version of this site.", sep = "")),
-                   " We have received excellent feedback from the academic community that has improved our presentation of the data, ",
-                   "especially from Samuel Keltner."
+                   " and Sander Su for their help launching the beta version of this site.", sep = "")),
+                   " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
+                   "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),
+                   HTML(sprintf('<font color="white">%s</font>',paste(Sys.info(), collapse = "; ")))
                    
                  )
         ),
         #Add the logo
         tags$script(HTML("var header = $('.navbar> .container-fluid > .navbar-collapse');
-                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');")),
+                       header.append('<div style=\"float:right; margin-top:10px;\"><img src=\"headerLogo.jpg\" height=\"40px\"></div>');"))
         
-        #Edit the css to make logo appear well
-        tags$head(tags$style(HTML("
-          .navbar .container-fluid{
-          background:linear-gradient(90deg, rgba(44,62,80,1) 0%, rgba(255,255,255,1) 65%, rgba(255,255,255,1) 100%);
-          }
-          .navbar-toggle {
-          background-color:#64717e;
-          }
-                        
-       ")))
-)
+))
 
 
 # ---- SERVER ----
 #*****************
 server <- function(input, output, session) {
   
+  updateTime = reactiveVal(Sys.time())
+  updateTimeHospital = reactiveVal(Sys.time())
+  filterWarning = reactiveVal("")
+  filterWarningTest = reactiveVal("")
+  regionTest = reactiveVal("")
+  
   referenceUs1 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
                       "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
-                      "\nLast data update: ", isolate(updateTime()),
-                      "\ncovid19watcher.research.cchmc.org", sep = ""))
+                      "\nShowing data through: ", isolate(updateTime()),
+                      "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
   
   referenceUs2 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                                "Data from 'The COVID Tracking Project'\n",
                                "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
-                               "\nLast data update: ", isolate(updateTimeHospital()),
-                               "\ncovid19watcher.research.cchmc.org", sep = ""))
+                               "\nShowing data through: ", isolate(updateTimeHospital()),
+                               "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
   
   #Load the NYT data
   covidData = reactive({
@@ -275,34 +317,36 @@ server <- function(input, output, session) {
     #Add the unknow counties
     data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
     data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
-
-    updateTime(as.character(max(data$date, na.rm = T)))
+    
+    updateTime(prettyDate(max(data$date, na.rm = T)))
 
     data  %>% select(-county, - state)
   })
+  
+  #Update the time on the page
+  output$updateTime = renderText(updateTime())
 
   #Load the COVID project data
   hospitalData = reactive({
     
     data = covidProjectData() %>% 
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
-      left_join(popByState, by = c("state" = "State"))
+      left_join(popByState, by = c("state" = "State")) %>% 
+      select('State_name','Population','posNeg','positive','negative','date') %>%
+      gather('category','count',-State_name, -Population,-date)
 
-    updateTimeHospital(as.character(max(data$date, na.rm = T)))
+    updateTimeHospital(prettyDate(max(data$date, na.rm = T)))
+    
+    #Edit the order of the labels by descending y-value
+    myOrder = data %>% group_by(State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
+    data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
 
-    data
+    data %>% ungroup()
 
   })
   
-
-  updateTime = reactiveVal(Sys.time())
-  updateTimeHospital = reactiveVal(Sys.time())
-  filterWarning = reactiveVal("")
-  filterWarningTest = reactiveVal("")
-  regionTest = reactiveVal("")
-  
   #Update the time on the page
-  output$updateTime = renderText(updateTime())
+  output$updateTimeHospital = renderText({prettyDate(max(hospitalData()$date, na.rm = T))})
   
   observeEvent(input$regionType, {
     if(input$regionType == "CSA.Title"){
@@ -394,7 +438,7 @@ server <- function(input, output, session) {
      #When normalizing cases or deaths per 10,000 residents
      if(input$relPop == 1 && input$yScale == 1){
        plotData = plotData %>% 
-         mutate(y = y / (population / 10000))
+         mutate(y = y / (Population / 10000))
      }
      
      #Edit the order of the labels by descending y-value
@@ -418,7 +462,7 @@ server <- function(input, output, session) {
       
       #If the population is relative, make sure the guide is too (is average population of ones shown)
       pop = ifelse(F, 
-                   mean(plot.data() %>% group_by(region) %>% summarise(p = max(population)) %>% pull(p)),
+                   mean(plot.data() %>% group_by(region) %>% summarise(p = max(Population)) %>% pull(p)),
                    10000)
       
       
@@ -465,7 +509,7 @@ server <- function(input, output, session) {
       geom_text(data = plot.data() %>% filter(date == last(date)), 
                 aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
                   {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
-                    x = x, y = y), size = 4, check_overlap = T,hjust=0, vjust=0.5) +
+                    x = x, y = y), size = 5, check_overlap = T,hjust=0, vjust=0.5) +
       #Update the labs based on the filters
       labs(title = sprintf('COVID-19 %s in %s', 
                            ifelse(input$outcome == 1, "Cases", "Deaths"),
@@ -482,6 +526,8 @@ server <- function(input, output, session) {
             legend.position = 'right', legend.direction = "vertical", 
             legend.title = element_blank(), 
             panel.border = element_blank(),
+            legend.margin = margin(0,0,0,20),
+            legend.background = element_blank(),
             plot.caption = element_text(hjust = 0.0, size = 14),
             axis.line = element_line(colour = "black"),
             text = element_text(size=20)) +
@@ -526,34 +572,50 @@ server <- function(input, output, session) {
      
      #Filter the hospitalData based on user selections
      myData = hospitalData() %>% filter(State_name %in% input$testState) %>% 
-       select(State_name, date, y = !!sym(input$testCurve), hospitalizedCurrently, inIcuCurrently, fips) %>% 
-       filter(y > 0)
+       filter(category %in% input$testCurve) %>%
+       #select(State_name, date, y = !!sym(input$testCurve)) %>% 
+       filter(count > 0)
+     
+     #When normalizing for tests per 10,000 residents
+     if(input$relPopTests == 1){
+       myData = myData %>% 
+         mutate(count = count / (Population / 10000))
+     }
      
      #If there is no data (e.g. 0 tests) warn the user and don't show line
      noData = setdiff(input$testState, myData$State_name)
-     if(length(noData) > 0){
+     if(nrow(myData) == 0){
+       filterWarningTest("No test were selected")
+     } else if(length(noData) > 0){
        filterWarningTest(paste("The following states have no data:", paste(noData, collapse = ", ")))
+     } else { 
+       filterWarningTest("")
      }
+     myData$category = as.factor(myData$category )
+     # Change the y-axis label if adjusting for population
+     yLabelTests = ifelse(input$relPopTests == 1 , "Numbers of Tests per 10,000 Residents", "Number of Tests")
      
      #Generate the plot
-     ggplot(myData, aes(x = date, y = y, color = State_name)) + 
-       geom_line(size = 1.2) + theme_bw() + scale_y_log10(labels = comma) +
-       #Add the latest counts at the end of the curve
+     ggplot(myData, aes(x = date, y = count, color = State_name, linetype = category)) + 
+       geom_line(size = 1.2) + theme_bw() + 
+       scale_linetype_manual(values = c("solid", "dashed", "dotted"),
+                            breaks = c("posNeg", "negative", "positive"),
+                           labels = c("Total", "Negative", "Positive")) +
+      #Add the latest counts at the end of the curve
        geom_text(data = myData %>% group_by(State_name) %>% filter(date == first(date)), 
-                 aes(label = y, x = date, y = y), size = 5, check_overlap = F,hjust=0, vjust=0.5) +
-       #Update the labs based on the filters
-       labs(title = sprintf('%s COVID-19 tests',
-                            case_when(
-                              input$testCurve == "positive" ~ "Postive",
-                              input$testCurve == "negative" ~ "Negative",
-                              T ~ "All"
-                            )),
+                 aes(label = if(input$relPopTests == 1){format(round(count, 2), big.mark = ",", nsmall = 2)} else 
+                 {format(round(count, 0), big.mark = ",", nsmall = 0)}, x = date, y = count), size = 5, 
+                 check_overlap = T,hjust=0, vjust=0.5) +
+       scale_y_continuous(labels = comma) +
+       labs(title = 'COVID-19 Testing Volume',
             caption = isolate(referenceUs2()))  +
-       xlab("Date") + ylab("Number of tests") +
+       xlab("Date") + ylab(yLabelTests) +
        coord_cartesian(clip = 'off') + #prevent clipping off labels
        theme(plot.title = element_text(hjust = 0.0),
              legend.position = 'right', legend.direction = "vertical",
              legend.title = element_blank(),
+             legend.margin = margin(0,0,0,20),
+             legend.background = element_blank(),
              panel.border = element_blank(),
              plot.caption = element_text(hjust = 0.0, size = 14),
              axis.line = element_line(colour = "black"),
@@ -583,6 +645,75 @@ server <- function(input, output, session) {
    #Warning when no testing data
    output$filterWarningsTest = renderText({
      filterWarningTest()
+   })
+   
+   
+   # ---- RANKING TABLES ----
+   #*************************
+   allRankingData = reactive({
+     latestDate = max(covidData()$date)
+     data = covidData() %>% filter(date == latestDate) %>% 
+       select(fips, cases, deaths)
+     colnames(data)[colnames(data) %in% c('cases','deaths')] <- c('Cases', 'Deaths')
+     
+     fipsData %>% left_join(data, by = c("FIPS" = "fips"))
+   })
+   
+   
+   countyTable = reactive({
+     rankItem = sym(input$rankItem)
+     
+     allRankingData() %>% filter(County != "Unknown", !is.na(!!rankItem)) %>%  
+      select(County, State, !!rankItem, FIPS) %>% 
+      left_join(popByCounty %>% select(-stateCounty), by = "FIPS") %>% 
+      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
+      select(-FIPS) %>% arrange(desc(!!rankItem)) %>% ungroup() %>% 
+      mutate(Ranking = 1:n()) %>% select(Ranking, County, State, Population, !!rankItem, `Per 10,000 Residents`)
+   })
+   
+   output$rankingCounty = renderDT({
+     datatable(countyTable(), rownames = F, 
+               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
+       formatCurrency(4:5, "", digits = 0)
+   })
+   
+   metroTable = reactive({
+     rankItem = sym(input$rankItem)
+     
+     allRankingData() %>% filter(!is.na(CSA.Title), !is.na(!!rankItem)) %>%  
+      select(City = CSA.Title, !!rankItem) %>% 
+      group_by(City) %>% 
+      summarise(!!rankItem := sum(!!rankItem)) %>% 
+      left_join(popByMetro, by = c("City" = "CSA.Title")) %>% 
+      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
+      arrange(desc(!!rankItem)) %>% ungroup() %>% 
+      mutate(Ranking = 1:n()) %>% select(Ranking, City, Population, !!rankItem, `Per 10,000 Residents`) 
+   })
+   
+   output$rankingMetro = renderDT({
+     datatable(metroTable(), rownames = F, 
+               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
+       formatCurrency(3:4, "", digits = 0)
+   })
+   
+   stateTable = reactive({
+     rankItem = sym(input$rankItem)
+     
+     allRankingData() %>% filter(!is.na(!!rankItem)) %>%  
+      select(State, !!rankItem) %>% 
+      group_by(State) %>% 
+      summarise(!!rankItem := sum(!!rankItem)) %>% 
+      left_join(popByState, by = "State") %>% 
+      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
+      arrange(desc(!!rankItem)) %>% ungroup() %>% 
+      mutate(Ranking = 1:n(), State = sprintf("%s (%s)", State_name, State)) %>% 
+      select(Ranking, State, Population, !!rankItem, `Per 10,000 Residents`) 
+   })
+   
+   output$rankingState = renderDT({
+     datatable(stateTable(), rownames = F, 
+               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
+       formatCurrency(3:4, "", digits = 0)
    })
 }
 
