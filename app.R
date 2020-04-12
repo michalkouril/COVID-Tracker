@@ -98,6 +98,28 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                          }
                        })
 
+#The reliability will only be checked once a day
+dataReliability = reactivePoll(intervalMillis = 8.6E+7, session = NULL, checkFunc = function() {Sys.time()}, 
+                    valueFunc = function() {
+                      
+                      if(!use_online_data){
+                        data = 0
+                      } else {
+                        data = GET("https://covidtracking.com/api/states.csv")
+                      }
+                      
+                      #If use_online_data = F or data not accessible online, use local files
+                      if(status_code(data) == 200){
+                        data = content(data)
+                        write.csv(data, "data/dataReliability.csv", row.names = F)
+                        print("Reliability data succesfully refreshed")
+                        data
+                      } else {
+                        print("Reliability data not accessible online, local data used")
+                        read.csv("data/dataReliability.csv", stringsAsFactors = F)
+                      }
+                    })
+
 
 # ---- Functions ----
 #********************
@@ -193,8 +215,8 @@ ui <- tagList(
                    sidebarPanel(
                      width = 4,
                      selectInput(inputId = "testState", label = "Select one or more states",
-                                 choices = popByState$State_name, 
-                                 multiple = T, selectize = T, selected = "Ohio"
+                                 choices = "", selected = "New York",
+                                 multiple = T, selectize = T
                      ),
                      checkboxGroupInput("testCurve", "Tests", 
                                   list("Positive" = "positive", "Negative" = "negative", "Total" = "posNeg"), 
@@ -203,8 +225,8 @@ ui <- tagList(
                      tags$div(textOutput("filterWarningsTest"), style = "color: red;"),
                      br(),
                      downloadButton("downloadTestPlot", "Download plot"),
-                     tags$br(),tags$br(), HTML(paste0("Note: The reliability of these data varies considerably between each state. Please visit ",
-                                                      a(href='https://covidtracking.com/about-data','The COVID Tracking Project', target="_blank"), "'s website for more information.", sep = ''))                          
+                     tags$br(),tags$br(), 
+                     htmlOutput("stateCommentsT")                         
                    ),
                    mainPanel(
                      plotOutput(outputId = 'testPlot')
@@ -215,18 +237,22 @@ ui <- tagList(
                  fluidRow(
                    div(wellPanel(
                      radioButtons("rankItem", "Data", inline = T, 
-                                  list("Cases" = "Cases", "Deaths"= "Deaths"))
+                                  list("Cases" = "Cases", "Deaths"= "Deaths", "Tests" = "Tests"))
                    ), align = "center")
                  ),
                  fluidRow(column(12, 
                    # div(HTML("<h5>You can sort each column or search for an area of interest</h5>"), 
                    #     align = "center"),
-                  tabsetPanel(
+                  tabsetPanel(id = "rankingTabs", 
                    tabPanel("County",br(),
                             HTML("NOTE: If your county is not listed, there is no data available.<br><br>"),
                             DTOutput("rankingCounty")),
                    tabPanel("City",br(),DTOutput("rankingMetro")),
-                   tabPanel("State",br(),DTOutput("rankingState"))
+                   tabPanel("State",br(),
+                            conditionalPanel(
+                              condition = "input.rankItem == 'Tests'",
+                              HTML("NOTE: Testing data is only available on state level.<br><br>")),
+                            DTOutput("rankingState"), htmlOutput("stateCommentsR"))
                  )))
                  ),
         tabPanel("About this site",
@@ -268,7 +294,7 @@ ui <- tagList(
                    " and Sander Su for their help launching the beta version of this site.", sep = "")),
                    " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
                    "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),
-                   HTML(sprintf('<font color="white">%s</font>',paste(Sys.info(), collapse = "; ")))
+                   HTML(sprintf('<font color="white">%s</font>',paste(system("hostnamectl --static"), collapse = "; ")))
                    
                  )
         ),
@@ -332,17 +358,24 @@ server <- function(input, output, session) {
     data = covidProjectData() %>% 
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
       left_join(popByState, by = c("state" = "State")) %>% 
-      select('State_name','Population','posNeg','positive','negative','date') %>%
-      gather('category','count',-State_name, -Population,-date)
-
+      select(state,State_name,Population,posNeg,positive,negative,date) %>%
+      gather(category,count,-state, -State_name, -Population,-date) %>% 
+      left_join(stateReliablilty(), by = "state") %>% 
+      filter(grade %in% c("A", "B")) %>% 
+      mutate(State_name = paste(State_name, ifelse(grade == "A", "", "*")))
+    
     updateTimeHospital(prettyDate(max(data$date, na.rm = T)))
     
     #Edit the order of the labels by descending y-value
-    myOrder = data %>% group_by(State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
+    myOrder = data %>% group_by(state, State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
     data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
 
     data %>% ungroup()
 
+  })
+  
+  stateReliablilty = reactive({
+    dataReliability() %>% select(state, grade)
   })
   
   #Update the time on the page
@@ -661,6 +694,7 @@ server <- function(input, output, session) {
    
    
    countyTable = reactive({
+     req(input$rankItem != "Tests")
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(County != "Unknown", !is.na(!!rankItem)) %>%  
@@ -668,7 +702,9 @@ server <- function(input, output, session) {
       left_join(popByCounty %>% select(-stateCounty), by = "FIPS") %>% 
       mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
       select(-FIPS) %>% arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n()) %>% select(Ranking, County, State, Population, !!rankItem, `Per 10,000 Residents`)
+      mutate(Ranking = 1:n()) %>% arrange(desc(`Per 10,000 Residents`)) %>% 
+       mutate(`Ranking/10,000` = 1:n()) %>% arrange(Ranking) %>%  
+       select(Ranking, County, State, Population, !!rankItem, `Per 10,000 Residents`, `Ranking/10,000`)
    })
    
    output$rankingCounty = renderDT({
@@ -678,6 +714,7 @@ server <- function(input, output, session) {
    })
    
    metroTable = reactive({
+     req(input$rankItem != "Tests")
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(!is.na(CSA.Title), !is.na(!!rankItem)) %>%  
@@ -687,7 +724,9 @@ server <- function(input, output, session) {
       left_join(popByMetro, by = c("City" = "CSA.Title")) %>% 
       mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
       arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n()) %>% select(Ranking, City, Population, !!rankItem, `Per 10,000 Residents`) 
+      mutate(Ranking = 1:n()) %>% arrange(desc(`Per 10,000 Residents`)) %>% 
+      mutate(`Ranking/10,000` = 1:n()) %>% arrange(Ranking) %>% 
+      select(Ranking, City, Population, !!rankItem, `Per 10,000 Residents`, `Ranking/10,000`) 
    })
    
    output$rankingMetro = renderDT({
@@ -696,24 +735,73 @@ server <- function(input, output, session) {
        formatCurrency(3:4, "", digits = 0)
    })
    
+   observeEvent(input$rankItem, {
+     if(input$rankItem == "Tests"){
+       hideTab(inputId = "rankingTabs", "County")
+       hideTab(inputId ="rankingTabs", "City")
+     } else {
+       showTab(inputId = "rankingTabs", "County")
+       showTab(inputId ="rankingTabs", "City")
+     }
+   })
+   
    stateTable = reactive({
-     rankItem = sym(input$rankItem)
      
-     allRankingData() %>% filter(!is.na(!!rankItem)) %>%  
-      select(State, !!rankItem) %>% 
-      group_by(State) %>% 
-      summarise(!!rankItem := sum(!!rankItem)) %>% 
-      left_join(popByState, by = "State") %>% 
-      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
-      arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n(), State = sprintf("%s (%s)", State_name, State)) %>% 
-      select(Ranking, State, Population, !!rankItem, `Per 10,000 Residents`) 
+     if(input$rankItem == "Tests"){
+       print("HELLO")
+       #Only keep the states for which the data is class A or B
+       hospitalData() %>% ungroup() %>% 
+         filter(date == max(date)) %>% 
+         spread(category, count) %>% arrange(desc(posNeg)) %>% 
+         mutate(Ranking = 1:n(),
+                `Tests per 10,000` = round(posNeg / (Population / 10000), 2)) %>% 
+         arrange(desc(`Tests per 10,000`)) %>% mutate(`Ranking per 10,000` = 1:n()) %>% 
+         arrange(Ranking) %>% 
+         select(Ranking, State = State_name, Population, 
+                `Total Tests`= posNeg, Positive = positive, Negative = negative,
+                `Tests per 10,000`, `Ranking per 10,000`)
+     } else {
+       rankItem = sym(input$rankItem)
+       
+       allRankingData() %>% filter(!is.na(!!rankItem)) %>%  
+         select(State, !!rankItem) %>% 
+         group_by(State) %>% 
+         summarise(!!rankItem := sum(!!rankItem)) %>% 
+         left_join(popByState, by = "State") %>% 
+         mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
+         arrange(desc(!!rankItem)) %>% ungroup() %>% 
+         mutate(Ranking = 1:n(), State = sprintf("%s (%s)", State_name, State)) %>% 
+         arrange(desc(`Per 10,000 Residents`)) %>% 
+         mutate(`Ranking/10,000` = 1:n()) %>% arrange(Ranking) %>% 
+         select(Ranking, State, Population, !!rankItem, `Per 10,000 Residents`, `Ranking/10,000`)
+     }
+      
    })
    
    output$rankingState = renderDT({
-     datatable(stateTable(), rownames = F, 
-               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
-       formatCurrency(3:4, "", digits = 0)
+     datatable(stateTable(), rownames = F,
+               options = list(pageLength = 10,
+                              columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>%
+       formatCurrency(columns = if(input$rankItem == "Tests"){3:7}else{3:4}, "", digits = 0)
+   })
+   
+   stateComments = reactive({
+     HTML(sprintf("The data-quality of states marked by * is sub-optimal (grade B) and should be interpreted with care<br><br>
+                  The following states had insufficient reporting to be included in the results: %s<br>
+                  For details on the quality scoring, visit the 
+                  <a href='https://covidtracking.com/about-data'>COVID-Tracking Project website</a>.",
+                  paste(stateReliablilty() %>% filter(!grade %in% c("A", "B")) %>% 
+                          pull(state) %>% sort(), collapse = ", ")))
+   })
+   
+   output$stateCommentsT = renderUI({
+     updateSelectInput(session, "testState", choices = hospitalData()$State_name, 
+                       selected = hospitalData()$State_name[str_detect(hospitalData()$State_name, "New York")])
+     stateComments()
+   })
+   
+   output$stateCommentsR = renderUI({
+     stateComments()
    })
 }
 
