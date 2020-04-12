@@ -214,18 +214,22 @@ ui <- tagList(
                  fluidRow(
                    div(wellPanel(
                      radioButtons("rankItem", "Data", inline = T, 
-                                  list("Cases" = "Cases", "Deaths"= "Deaths"))
+                                  list("Cases" = "Cases", "Deaths"= "Deaths", "Tests" = "Tests"))
                    ), align = "center")
                  ),
                  fluidRow(column(12, 
                    # div(HTML("<h5>You can sort each column or search for an area of interest</h5>"), 
                    #     align = "center"),
-                  tabsetPanel(
+                  tabsetPanel(id = "rankingTabs", 
                    tabPanel("County",br(),
                             HTML("NOTE: If your county is not listed, there is no data available.<br><br>"),
                             DTOutput("rankingCounty")),
                    tabPanel("City",br(),DTOutput("rankingMetro")),
-                   tabPanel("State",br(),DTOutput("rankingState"))
+                   tabPanel("State",br(),
+                            conditionalPanel(
+                              condition = "input.rankItem == 'Tests'",
+                              HTML("NOTE: Testing data is only available on state level.<br><br>")),
+                            DTOutput("rankingState"))
                  )))
                  ),
         tabPanel("About this site",
@@ -267,7 +271,7 @@ ui <- tagList(
                    " and Sander Su for their help launching the beta version of this site.", sep = "")),
                    " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
                    "we would especially like to acknowledge Samuel Keltner for his suggestions.", tags$br(),tags$br(),tags$br(),
-                   HTML(sprintf('<font color="white">%s</font>',paste(Sys.info(), collapse = "; ")))
+                   HTML(sprintf('<font color="white">%s</font>',paste(system("hostnamectl --static"), collapse = "; ")))
                    
                  )
         ),
@@ -660,6 +664,7 @@ server <- function(input, output, session) {
    
    
    countyTable = reactive({
+     req(input$rankItem != "Tests")
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(County != "Unknown", !is.na(!!rankItem)) %>%  
@@ -667,7 +672,9 @@ server <- function(input, output, session) {
       left_join(popByCounty %>% select(-stateCounty), by = "FIPS") %>% 
       mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
       select(-FIPS) %>% arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n()) %>% select(Ranking, County, State, Population, !!rankItem, `Per 10,000 Residents`)
+      mutate(Ranking = 1:n()) %>% arrange(desc(`Per 10,000 Residents`)) %>% 
+       mutate(`Ranking/10,000` = 1:n()) %>% arrange(Ranking) %>%  
+       select(Ranking, County, State, Population, !!rankItem, `Per 10,000 Residents`, `Ranking/10,000`)
    })
    
    output$rankingCounty = renderDT({
@@ -677,6 +684,7 @@ server <- function(input, output, session) {
    })
    
    metroTable = reactive({
+     req(input$rankItem != "Tests")
      rankItem = sym(input$rankItem)
      
      allRankingData() %>% filter(!is.na(CSA.Title), !is.na(!!rankItem)) %>%  
@@ -686,7 +694,9 @@ server <- function(input, output, session) {
       left_join(popByMetro, by = c("City" = "CSA.Title")) %>% 
       mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
       arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n()) %>% select(Ranking, City, Population, !!rankItem, `Per 10,000 Residents`) 
+      mutate(Ranking = 1:n()) %>% arrange(desc(`Per 10,000 Residents`)) %>% 
+      mutate(`Ranking/10,000` = 1:n()) %>% arrange(Ranking) %>% 
+      select(Ranking, City, Population, !!rankItem, `Per 10,000 Residents`, `Ranking/10,000`) 
    })
    
    output$rankingMetro = renderDT({
@@ -695,24 +705,51 @@ server <- function(input, output, session) {
        formatCurrency(3:4, "", digits = 0)
    })
    
+   observeEvent(input$rankItem, {
+     if(input$rankItem == "Tests"){
+       hideTab(inputId = "rankingTabs", "County")
+       hideTab(inputId ="rankingTabs", "City")
+     } else {
+       showTab(inputId = "rankingTabs", "County")
+       showTab(inputId ="rankingTabs", "City")
+     }
+   })
+   
    stateTable = reactive({
-     rankItem = sym(input$rankItem)
      
-     allRankingData() %>% filter(!is.na(!!rankItem)) %>%  
-      select(State, !!rankItem) %>% 
-      group_by(State) %>% 
-      summarise(!!rankItem := sum(!!rankItem)) %>% 
-      left_join(popByState, by = "State") %>% 
-      mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
-      arrange(desc(!!rankItem)) %>% ungroup() %>% 
-      mutate(Ranking = 1:n(), State = sprintf("%s (%s)", State_name, State)) %>% 
-      select(Ranking, State, Population, !!rankItem, `Per 10,000 Residents`) 
+     if(input$rankItem == "Tests"){
+       hospitalData() %>% ungroup() %>% filter(date == max(date)) %>% 
+         spread(category, count) %>% arrange(desc(posNeg)) %>% 
+         mutate(Ranking = 1:n(), 
+                `Tests per 10,000` = round(posNeg / (Population / 10000), 2)) %>% 
+         arrange(desc(`Tests per 10,000`)) %>% mutate(`Ranking per 10,000` = 1:n()) %>% 
+         arrange(Ranking) %>% 
+         select(Ranking, State = State_name, Population, 
+                `Total Tests`= posNeg, Positive = positive, Negative = negative,
+                `Tests per 10,000`, `Ranking per 10,000`)
+     } else {
+       rankItem = sym(input$rankItem)
+       
+       allRankingData() %>% filter(!is.na(!!rankItem)) %>%  
+         select(State, !!rankItem) %>% 
+         group_by(State) %>% 
+         summarise(!!rankItem := sum(!!rankItem)) %>% 
+         left_join(popByState, by = "State") %>% 
+         mutate(`Per 10,000 Residents` = round(!!rankItem / (Population / 10000), 2)) %>% 
+         arrange(desc(!!rankItem)) %>% ungroup() %>% 
+         mutate(Ranking = 1:n(), State = sprintf("%s (%s)", State_name, State)) %>% 
+         arrange(desc(`Per 10,000 Residents`)) %>% 
+         mutate(`Ranking/10,000` = 1:n()) %>% arrange(Ranking) %>% 
+         select(Ranking, State, Population, !!rankItem, `Per 10,000 Residents`, `Ranking/10,000`)
+     }
+      
    })
    
    output$rankingState = renderDT({
-     datatable(stateTable(), rownames = F, 
-               options = list(pageLength = 10, columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>% 
-       formatCurrency(3:4, "", digits = 0)
+     datatable(stateTable(), rownames = F,
+               options = list(pageLength = 10,
+                              columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>%
+       formatCurrency(columns = if(input$rankItem == "Tests"){3:7}else{3:4}, "", digits = 0)
    })
 }
 

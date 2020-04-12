@@ -72,8 +72,8 @@ unknownCounties = map_df(unknownCounties$stateName, function(myState){
 colnames(unknownCounties) = colnames(fipsData)
 
 #Add missing state data in the unknown counties
-unknownCounties[unknownCounties$State %in% c("GU", "MP", "PR", "VI"),"POPESTIMATE2019"] = 
-  c(167772, 51994, 2933408, 104578)
+unknownCounties[unknownCounties$State %in% c("AS","GU", "MP", "PR", "UM", "VI"),"POPESTIMATE2019"] = 
+  c(55689 , 167772, 51994, 2933408, 300, 104578)
 
 
 fipsData = rbind(fipsData, unknownCounties)
