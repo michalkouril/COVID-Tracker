@@ -98,6 +98,28 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                          }
                        })
 
+#The reliability will only be checked once a day
+dataReliability = reactivePoll(intervalMillis = 8.6E+7, session = NULL, checkFunc = function() {Sys.time()}, 
+                    valueFunc = function() {
+                      
+                      if(!use_online_data){
+                        data = 0
+                      } else {
+                        data = GET("https://covidtracking.com/api/states.csv")
+                      }
+                      
+                      #If use_online_data = F or data not accessible online, use local files
+                      if(status_code(data) == 200){
+                        data = content(data)
+                        write.csv(data, "data/dataReliability.csv", row.names = F)
+                        print("Reliability data succesfully refreshed")
+                        data
+                      } else {
+                        print("Reliability data not accessible online, local data used")
+                        read.csv("data/dataReliability.csv", stringsAsFactors = F)
+                      }
+                    })
+
 
 # ---- Functions ----
 #********************
@@ -193,8 +215,8 @@ ui <- tagList(
                    sidebarPanel(
                      width = 4,
                      selectInput(inputId = "testState", label = "Select one or more states",
-                                 choices = popByState$State_name, 
-                                 multiple = T, selectize = T, selected = "Ohio"
+                                 choices = "", selected = "New York",
+                                 multiple = T, selectize = T
                      ),
                      checkboxGroupInput("testCurve", "Tests", 
                                   list("Positive" = "positive", "Negative" = "negative", "Total" = "posNeg"), 
@@ -203,8 +225,8 @@ ui <- tagList(
                      tags$div(textOutput("filterWarningsTest"), style = "color: red;"),
                      br(),
                      downloadButton("downloadTestPlot", "Download plot"),
-                     tags$br(),tags$br(), HTML(paste0("Note: The reliability of these data varies considerably between each state. Please visit ",
-                                                      a(href='https://covidtracking.com/about-data','The COVID Tracking Project', target="_blank"), "'s website for more information.", sep = ''))                          
+                     tags$br(),tags$br(), 
+                     htmlOutput("stateCommentsT")                         
                    ),
                    mainPanel(
                      plotOutput(outputId = 'testPlot')
@@ -230,7 +252,7 @@ ui <- tagList(
                             conditionalPanel(
                               condition = "input.rankItem == 'Tests'",
                               HTML("NOTE: Testing data is only available on state level.<br><br>")),
-                            DTOutput("rankingState"))
+                            DTOutput("rankingState"), htmlOutput("stateCommentsR"))
                  )))
                  ),
         tabPanel("About this site",
@@ -336,17 +358,24 @@ server <- function(input, output, session) {
     data = covidProjectData() %>% 
       mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
       left_join(popByState, by = c("state" = "State")) %>% 
-      select('State_name','Population','posNeg','positive','negative','date') %>%
-      gather('category','count',-State_name, -Population,-date)
-
+      select(state,State_name,Population,posNeg,positive,negative,date) %>%
+      gather(category,count,-state, -State_name, -Population,-date) %>% 
+      left_join(stateReliablilty(), by = "state") %>% 
+      filter(grade %in% c("A", "B")) %>% 
+      mutate(State_name = paste(State_name, ifelse(grade == "A", "", "*")))
+    
     updateTimeHospital(prettyDate(max(data$date, na.rm = T)))
     
     #Edit the order of the labels by descending y-value
-    myOrder = data %>% group_by(State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
+    myOrder = data %>% group_by(state, State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
     data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
 
     data %>% ungroup()
 
+  })
+  
+  stateReliablilty = reactive({
+    dataReliability() %>% select(state, grade)
   })
   
   #Update the time on the page
@@ -719,9 +748,12 @@ server <- function(input, output, session) {
    stateTable = reactive({
      
      if(input$rankItem == "Tests"){
-       hospitalData() %>% ungroup() %>% filter(date == max(date)) %>% 
+       print("HELLO")
+       #Only keep the states for which the data is class A or B
+       hospitalData() %>% ungroup() %>% 
+         filter(date == max(date)) %>% 
          spread(category, count) %>% arrange(desc(posNeg)) %>% 
-         mutate(Ranking = 1:n(), 
+         mutate(Ranking = 1:n(),
                 `Tests per 10,000` = round(posNeg / (Population / 10000), 2)) %>% 
          arrange(desc(`Tests per 10,000`)) %>% mutate(`Ranking per 10,000` = 1:n()) %>% 
          arrange(Ranking) %>% 
@@ -751,6 +783,25 @@ server <- function(input, output, session) {
                options = list(pageLength = 10,
                               columnDefs = list(list(className = 'dt-center', targets = "_all")))) %>%
        formatCurrency(columns = if(input$rankItem == "Tests"){3:7}else{3:4}, "", digits = 0)
+   })
+   
+   stateComments = reactive({
+     HTML(sprintf("The data-quality of states marked by * is sub-optimal (grade B) and should be interpreted with care<br><br>
+                  The following states had insufficient reporting to be included in the results: %s<br>
+                  For details on the quality scoring, visit the 
+                  <a href='https://covidtracking.com/about-data'>COVID-Tracking Project website</a>.",
+                  paste(stateReliablilty() %>% filter(!grade %in% c("A", "B")) %>% 
+                          pull(state) %>% sort(), collapse = ", ")))
+   })
+   
+   output$stateCommentsT = renderUI({
+     updateSelectInput(session, "testState", choices = hospitalData()$State_name, 
+                       selected = hospitalData()$State_name[str_detect(hospitalData()$State_name, "New York")])
+     stateComments()
+   })
+   
+   output$stateCommentsR = renderUI({
+     stateComments()
    })
 }
 
