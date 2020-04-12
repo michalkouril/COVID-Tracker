@@ -138,6 +138,11 @@ mobileDetect <- function(inputId, value = 0) {
   )
 }
 
+prettyDate = function(date){
+  gsub("/0","/", gsub("^0","", 
+        as.character(as.Date(date) %>% format('%m/%d/%Y'))))
+}
+
 
 # ---- UI ----
 #**************
@@ -225,8 +230,10 @@ ui <- tagList(
                  ),
         tabPanel("About this site",
                  tags$div(
-                   tags$h4("Last update"), 
-                   textOutput("updateTime"), 'Data updated daily.',
+                   tags$h4("Last Updates"), 
+                   "NYT Data:", textOutput("updateTime", inline = T), br(),
+                   "COVID-Project Data:", textOutput("updateTimeHospital", inline = T), br(),
+                   HTML('App:&nbsp'), prettyDate(file.info("app.R")$mtime),
                    tags$br(),tags$br(),tags$h4("Summary"),
                    "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
                    "As the coronavirus continues to spread throughout the U.S., thousands of people from across the country have used this dashboard to understand how the virus is impacting their community. Users can compare cities to watch the effects of shelter-in-place orders and gain insights on what may come next.",
@@ -275,6 +282,12 @@ ui <- tagList(
 #*****************
 server <- function(input, output, session) {
   
+  updateTime = reactiveVal(Sys.time())
+  updateTimeHospital = reactiveVal(Sys.time())
+  filterWarning = reactiveVal("")
+  filterWarningTest = reactiveVal("")
+  regionTest = reactiveVal("")
+  
   referenceUs1 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
                       "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
@@ -303,11 +316,14 @@ server <- function(input, output, session) {
     #Add the unknow counties
     data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
     data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
-
-    updateTime(gsub("/0","/", gsub("^0","", as.character(max(data$date, na.rm = T) %>% format('%m/%d/%Y')))))
+    
+    updateTime(prettyDate(max(data$date, na.rm = T)))
 
     data  %>% select(-county, - state)
   })
+  
+  #Update the time on the page
+  output$updateTime = renderText(updateTime())
 
   #Load the COVID project data
   hospitalData = reactive({
@@ -318,7 +334,7 @@ server <- function(input, output, session) {
       select('State_name','Population','posNeg','positive','negative','date') %>%
       gather('category','count',-State_name, -Population,-date)
 
-    updateTimeHospital(gsub("/0","/", gsub("^0","", as.character(max(data$date, na.rm = T) %>% format('%m/%d/%Y')))))
+    updateTimeHospital(prettyDate(max(data$date, na.rm = T)))
     
     #Edit the order of the labels by descending y-value
     myOrder = data %>% group_by(State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
@@ -328,16 +344,8 @@ server <- function(input, output, session) {
 
   })
   
-
-  #updateTime = reactiveVal(gsub("/0","/", gsub("^0","", as.character(Sys.time() %>% format('%m/%d/%Y')))))
-  updateTime = reactiveVal(Sys.time())
-  updateTimeHospital = reactiveVal(Sys.time())
-  filterWarning = reactiveVal("")
-  filterWarningTest = reactiveVal("")
-  regionTest = reactiveVal("")
-  
   #Update the time on the page
-  output$updateTime = renderText(updateTime())
+  output$updateTimeHospital = renderText({prettyDate(max(hospitalData()$date, na.rm = T))})
   
   observeEvent(input$regionType, {
     if(input$regionType == "CSA.Title"){
