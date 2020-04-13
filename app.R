@@ -200,7 +200,7 @@ ui <- tagList(
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
-                  downloadButton("downloadcasesPlot", "Download plot"),
+                  downloadButton("downloadCasesPlot", "Download plot"),
                   tags$div(textOutput("filterWarnings"), style = "color: red;"),
                   mobileDetect('isMobile')
 
@@ -577,7 +577,7 @@ server <- function(input, output, session) {
 
   
   # ---- Download Cases/Deaths plot ----
-  output$downloadcasesPlot <- downloadHandler(
+  output$downloadCasesPlot <- downloadHandler(
     filename = function() {
       paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
     },
