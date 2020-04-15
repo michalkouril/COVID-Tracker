@@ -68,9 +68,16 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                          #If use_online_data = F or data not accessible online, use local files
                          if(status_code(test) == 200){
                            data = read.csv(link, stringsAsFactors = F)
-                           write.csv(data, "data/us-counties.csv", row.names = F)
-                           print("NYT data succesfully refreshed")
-                           data
+                           # Check to make sure the new data are the format and size that we expect
+                           old.data = read.csv("data/us-counties.csv", stringsAsFactors = F)
+                           if(nrow(data) < nrow(old.data) | !identical(colnames(data), colnames(old.data))){
+                             print("The online NYT data was not in the expected format, local data used")
+                             read.csv("data/us-counties.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
+                           } else{ # The online data is good.
+                             write.csv(data, "data/us-counties.csv", row.names = F)
+                             print("NYT data succesfully refreshed")
+                             data
+                           } 
                          } else {
                            print("NYT not accessible online, local data used")
                            read.csv("data/us-counties.csv", stringsAsFactors = F)
@@ -89,9 +96,16 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                          #If use_online_data = F or data not accessible online, use local files
                          if(status_code(data) == 200){
                            data = content(data)
-                           write.csv(data, "data/hospitalData.csv", row.names = F)
-                           print("covidProjectData data succesfully refreshed")
-                           data
+                             # Check to make sure the new data are the format and size that we expect
+                             old.data = read.csv("data/hospitalData.csv", stringsAsFactors = F)
+                             if(nrow(data) < nrow(old.data) | !identical(colnames(data), colnames(old.data))){
+                               print("The online covidProjectData was not in the expected format, local data used")
+                               read.csv("data/hospitalData.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
+                             } else{ # The online data is good.
+                               write.csv(data, "data/hospitalData.csv", row.names = F)
+                             print("covidProjectData data succesfully refreshed")
+                             data
+                             } 
                          } else {
                            print("covidProjectData not accessible online, local data used")
                            read.csv("data/hospitalData.csv", stringsAsFactors = F)
