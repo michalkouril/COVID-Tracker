@@ -258,8 +258,8 @@ ui <- tagList(
         tabPanel("About this site",
                  tags$div(
                    tags$h4("Last Updates"), 
-                   "NYT Data:", textOutput("updateTime", inline = T), br(),
-                   "COVID-Project Data:", textOutput("updateTimeHospital", inline = T), br(),
+                   "The New York Times Data:", textOutput("updateTime", inline = T), br(),
+                   "The COVID-Project Data:", textOutput("updateTimeHospital", inline = T), br(),
                    HTML('App:&nbsp'), prettyDate(file.info("app.R")$mtime),
                    tags$br(),tags$br(),tags$h4("Summary"),
                    "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
@@ -276,20 +276,23 @@ ui <- tagList(
                    HTML(paste0("This is an open-source tool and suggestions for improvement are welcomed. Those interested in contributing to this site can access the code on ", 
                                a(href='https://github.com/wisselbd/COVID-Tracker','GitHub', target="_blank"), ". Major contributions will be acknowledged.", sep = '')),
                    tags$br(),tags$br(),tags$h4("Authors"),
-                   HTML(paste0("Benjamin Wissel, BS<sup>1,2</sup>, and PJ Van Camp, MD<sup>1,2</sup>", sep = "")), tags$br(),tags$br(), 
-                   HTML(paste0("<sup>1</sup>Department of Biomedical Informatics, University of Cincinnati College of Medicine", sep = "")), tags$br(), 
-                   HTML(paste0("<sup>2</sup>Division of Biomedical Informatics, Cincinnati Children's Hospital Medical Center", sep = "")),
+                   HTML(paste0("Benjamin Wissel, BS<sup>1,2</sup>, PJ Van Camp, MD<sup>1,2</sup>, ", 
+                               "Michal Kouril, PhD<sup>1,2,3</sup>, Chad Weis, MS<sup>1</sup>, Tracy A. Glauser, MD<sup>1,3,4</sup>, Peter S. White, PhD<sup>2</sup>, Isaac S. Kohane, MD, PhD<sup>5</sup>, and Judith W. Dexheimer, PhD<sup>1,2,3,6</sup>",sep = "")), tags$br(),tags$br(), 
+                   HTML(paste0("<sup>1</sup>Division of Biomedical Informatics, Cincinnati Children’s Hospital Medical Center, Cincinnati, OH, USA", sep = "")), tags$br(), 
+                   HTML(paste0("<sup>2</sup>Department of Biomedical Informatics, University of Cincinnati College of Medicine, Cincinnati, OH, USA", sep = "")),tags$br(), 
+                   HTML(paste0("<sup>3</sup>Department of Pediatrics, University of Cincinnati College of Medicine, Cincinnati, OH, USA", sep = "")),tags$br(), 
+                   HTML(paste0("<sup>4</sup>Division of Neurology, Cincinnati Children’s Hospital Medical Center, Cincinnati, OH, USA", sep = "")),tags$br(), 
+                   HTML(paste0("<sup>5</sup>Department of Biomedical Informatics, Harvard Medical School, Boston, MA, USA", sep = "")),tags$br(), 
+                   HTML(paste0("<sup>6</sup>Division of Emergency Medicine, Cincinnati Children’s Hospital Medical Center, Cincinnati, OH, USA", sep = "")),
+                   tags$br(),tags$br(),tags$h4("Citation"),
+                   HTML("Wissel BD, Van Camp PJ, Kouril M, Weis C, Glauser TA, White PS, Kohane IS, Dexheimer JW. An Interactive Online Dashboard for Tracking COVID-19 in U.S. Counties, Cities, and States in Real-Time. 2020. Under Review."),
                    tags$br(),tags$br(),tags$h4("Contact"),
-                   #PJ: Can you make this email address a hyperlink that pulls up an email?
                    HTML('<b>Benjamin Wissel</b><br>Email: <a href="mailto:benjamin.wissel@cchmc.org?Subject=About%20COVID19%20WATCHER" target="_top">benjamin.wissel@cchmc.org</a>'),
                    tags$br(),
                    "Twitter: ", tags$a(href="https://twitter.com/BDWissel", "@bdwissel", target="_blank"),
                    HTML("<br><br><b>PJ Van Camp</b><br>LinkedIn: <a href='https://www.linkedin.com/in/pjvancamp/'>pjvancamp</a>"),
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
-                   HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Chad Weis and ", 
-                    a(href="https://www.cincinnatichildrens.org/bio/k/michal-kouril", "Michal Kouril, PhD", target="_blank"), 
-                    " for their help with building the infrastructure for the site; ",
-                    "Leighanne Toole for media relations and promotion; and ", 
+                   HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Leighanne Toole for media relations and promotion; and ", 
                    a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
                    " and Sander Su for their help launching the beta version of this site.", sep = "")),
                    " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
@@ -786,10 +789,10 @@ server <- function(input, output, session) {
    })
    
    stateComments = reactive({
-     HTML(sprintf("The data-quality of states marked by * is sub-optimal (grade B) and should be interpreted with care<br><br>
-                  The following states had insufficient reporting to be included in the results: %s<br>
-                  For details on the quality scoring, visit the 
-                  <a href='https://covidtracking.com/about-data'>COVID-Tracking Project website</a>.",
+     HTML(sprintf("
+                  The following states and territories had insufficient reporting and were not included: %s.<br><br>
+* Indicates that the state's reporting of test results is sub-optimal and should be interpreted with care. For more information, visit the 
+                  <a href='https://covidtracking.com/about-data'>COVID-Tracking Project</a>'s website.<br><br>",
                   paste(stateReliablilty() %>% filter(!grade %in% c("A", "B")) %>% 
                           pull(state) %>% sort(), collapse = ", ")))
    })
