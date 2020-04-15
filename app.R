@@ -292,7 +292,7 @@ ui <- tagList(
                    "Twitter: ", tags$a(href="https://twitter.com/BDWissel", "@bdwissel", target="_blank"),
                    HTML("<br><br><b>PJ Van Camp</b><br>LinkedIn: <a href='https://www.linkedin.com/in/pjvancamp/'>pjvancamp</a>"),
                    tags$br(),tags$br(),tags$h4("Acknowledgements"),
-                   HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Leighanne Toole for media relations and promotion; and ", 
+                   HTML(paste0("This site would not be possible without the help of our excellent team. Special thanks to Leighanne Toole for media relations and promotion, and ", 
                    a(href="https://researchdirectory.uc.edu/p/wutz", "Danny Wu, PhD", target="_blank"), 
                    " and Sander Su for their help launching the beta version of this site.", sep = "")),
                    " We have received excellent feedback from the academic community, which we have taken into consideration and used to improve the presentation of the data; ",
