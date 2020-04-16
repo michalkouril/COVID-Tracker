@@ -22,15 +22,19 @@ ga('send', 'pageview');
   
   //Send info to GA when Shiny Inputs change
   $(document).on('shiny:inputchanged', function(event) {
-    
+
     if(event.name == "nav"){
       //Tab switch (initial tab not recorded)
       ga('send', 'event', 'interaction','tabSwitch',event.value);
-    } else if(event.name == "downloadCasesPlot"){
-      ga('send', 'event', 'interaction','downloadCasesPlot');
-    } else if(event.name == "downloadTestPlot"){
-      ga('send', 'event', 'interaction','downloadTestPlot');
-    }
+    } 
     
   });
+  
+  //Send info to GA when plot downloaded 
+  Shiny.addCustomMessageHandler('downloadPlot', function(value) {
+    //console.log(value);
+    //console.log(data.value);
+    ga('send', 'event', 'interaction','downloadPlot',value);
+  });
+    
 </script>

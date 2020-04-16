@@ -331,7 +331,7 @@ server <- function(input, output, session) {
   filterWarning = reactiveVal("")
   filterWarningTest = reactiveVal("")
   regionTest = reactiveVal("")
-  
+
   referenceUs1 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                       "Data from The New York Times, based on reports from state and local health agencies.\n",
                       "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
@@ -599,6 +599,11 @@ server <- function(input, output, session) {
       paste("covid19watcher_Plot_", as.integer(Sys.time()), ".png", sep="")
     },
     content = function(file) {
+      #Send the download to GA
+      session$sendCustomMessage(
+        "downloadPlot", paste("case-death", input$regionType, input$outcome, 
+                              input$yScale, input$relPop, sep = ", "))
+      #Get the plot
       myPlot = casesPlot() +
         labs(caption =  isolate(referenceUs1()))
       ggsave(file, myPlot, width = 12, height = 7, device = "png")
@@ -685,7 +690,11 @@ server <- function(input, output, session) {
        paste("covid19watcher_TestingPlot_", as.integer(Sys.time()), ".png", sep="")
      },
      content = function(file) {
-       
+       #Send the download to GA
+       session$sendCustomMessage(
+         "downloadPlot", paste("testing", paste(input$testCurve, collapse = "/"), input$relPopTests, 
+                               sep = ", "))
+       #Get the plot
        ggsave(file, testingData(), width = 12, height = 7, device = "png")
        
      }
