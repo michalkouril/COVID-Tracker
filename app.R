@@ -33,7 +33,7 @@ if(Sys.getenv("SHINY_PORT") == ""){
 } else{
   print("ONLINE MODE")
   use_online_data = T
-  use_google_analytics = F
+  use_google_analytics = T
 } 
 
 
