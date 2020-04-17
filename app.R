@@ -18,6 +18,7 @@ if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.or
 if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(tidyr)) install.packages("tidyr", repos = "http://cran.us.r-project.org")
+if(!require(tidyquant)) install.packages("tidyquant", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -208,6 +209,7 @@ ui <- tagList(
                     helpText('Tip: type the name for easy searching'),hr()
                   ),
                   radioButtons("outcome", "Data", list("Cases" = 1, "Deaths" = 2), inline = T),
+                  radioButtons("view", "View", list("Daily" = 1, "Cumulative" = 2), inline = T, selected = 2),
                   radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
                   conditionalPanel(
                     condition = "input.yScale == 1",  
@@ -362,6 +364,10 @@ server <- function(input, output, session) {
     data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
     
     updateTime(prettyDate(max(data$date, na.rm = T)))
+    
+    data = transform(data, 
+              casesDaily = ave(cases, fips, FUN=function(x) x - c(0, head(x, -1))),
+              deathsDaily = ave(deaths, fips, FUN=function(x) x - c(0, head(x, -1))))
 
     data  %>% select(-county, - state)
   })
@@ -427,12 +433,18 @@ server <- function(input, output, session) {
 
      #This will be used later when we can select different region levels (e.g. county, state, ...)
      groupByRegion = sym(isolate(input$regionType))
-     outcome = sym(ifelse(input$outcome == 1, "cases", "deaths"))
+     outcome = sym(
+                     if(input$view == 1){
+                       ifelse(input$outcome == 1, "casesDaily", "deathsDaily")
+                     } else{
+                       ifelse(input$outcome == 1, "cases", "deaths")
+                     }
+                   )
      
      #If working by date, crop the data
      covidNumbers = covidData() 
      if(input$yScale == 1){
-       covidNumbers = covidNumbers%>% filter(between(date, Sys.Date()-21, Sys.Date()))
+       covidNumbers = covidNumbers%>% filter(between(date, Sys.Date()-28, Sys.Date()))
      }
      
      #Build the data for the plot
@@ -441,7 +453,7 @@ server <- function(input, output, session) {
        select(region = !!groupByRegion, FIPS) %>% 
        left_join(covidNumbers, by = c("FIPS" = "fips")) %>% #Join the cases per fips
        filter(!is.na(date)) %>% group_by(region, date) %>% #Now group per region
-       summarise(cases = sum(cases), deaths = sum(deaths)) 
+       summarise(cases = sum(cases), deaths = sum(deaths), casesDaily = sum(casesDaily), deathsDaily = sum(deathsDaily)) 
 
      if(isolate(input$regionType) == "CSA.Title"){
        plotData = plotData %>% 
@@ -504,8 +516,20 @@ server <- function(input, output, session) {
     
     startCases = ifelse(input$outcome == 1, 10, 1)
     
-    plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
-      geom_line(size = 1.2)
+    plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) 
+    
+    # If displaying new cases/deaths each day, show the moving average. If showing the cumulative, just dispay the number.
+    # Also, only show the labels for the most recent value if displaying the cumulative data.
+    if(input$view == 1){
+      plot = plot + geom_ma(ma_fun = SMA, n = 7, linetype = "solid", size = 1.2) # Plot 7-day simple moving average (SMA)
+    } else{
+      plot = plot + geom_line(size = 1.2) +
+        #Add the latest counts at the end of the curve
+        geom_text(data = plot.data() %>% filter(date == last(date)), 
+                  aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
+                  {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
+                  x = x, y = y), size = 5, check_overlap = T,hjust=0, vjust=0.5)
+    } 
     
     #Guide for doubling time
     if(input$yScale == 2){ #Only relevant when aligned by number of starting cases
@@ -516,34 +540,34 @@ server <- function(input, output, session) {
                    10000)
       
       
-      #Generate the doubline time using the doubleRate function (see at top)
-      if(input$yScale == 2){
-        plot = plot + 
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 1, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 7, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
-          
-        oneDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 1, startCases = startCases)
-        twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
-        threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
-        sevenDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 7, startCases = startCases)
+        #Generate the doubline time using the doubleRate function (see at top)
+        if(input$yScale == 2 && input$view == 2){
+          plot = plot + 
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 1, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 7, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
+            
+          oneDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 1, startCases = startCases)
+          twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
+          threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
+          sevenDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 7, startCases = startCases)
+        
+        plot = plot +
+          annotate("text", x = oneDayLabel$posX, y = oneDayLabel$posY, label = "Doubles every day", color = "#8D8B8B") +
+          annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
+          annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
+          annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
+          scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
+        
+      } else { # Don't include the reference lines if plotting new cases/deaths per day
+        plot = plot + scale_y_continuous(labels = comma)
       }
-      
-      plot = plot +
-        annotate("text", x = oneDayLabel$posX, y = oneDayLabel$posY, label = "Doubles every day", color = "#8D8B8B") +
-        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
-        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
-        annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
-        scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
-      
-    } else {
-      plot = plot + scale_y_continuous(labels = comma)
-    }
+    }  
     
     #Labels depend on selections
     xLabel = ifelse(input$yScale == 1, "Date", 
@@ -555,11 +579,8 @@ server <- function(input, output, session) {
                     ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
     
     plot + theme_bw() +
-      #Add the latest counts at the end of the curve
-      geom_text(data = plot.data() %>% filter(date == last(date)), 
-                aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
-                  {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
-                    x = x, y = y), size = 5, check_overlap = T,hjust=0, vjust=0.5) +
+      # Force the y-axis to start at zero
+      expand_limits(y = 0) +
       #Update the labs based on the filters
       labs(title = sprintf('COVID-19 %s in %s', 
                            ifelse(input$outcome == 1, "Cases", "Deaths"),
