@@ -210,9 +210,12 @@ ui <- tagList(
                   ),
                   radioButtons("outcome", "Data", list("Cases" = 1, "Deaths" = 2), inline = T),
                   radioButtons("view", "View", list("Daily" = 1, "Cumulative" = 2), inline = T, selected = 2),
-                  radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
                   conditionalPanel(
-                    condition = "input.yScale == 1",  
+                    condition = "input.view == 2",
+                    radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T)
+                  ),
+                  conditionalPanel(
+                    condition = "input.yScale == 1 || input.view == 1",  
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
@@ -480,7 +483,7 @@ server <- function(input, output, session) {
      
      #In case the plot needs to show starting from 10 cases
      omitted = NULL
-     if(input$yScale == 2){
+     if(input$yScale == 2 && input$view == 2){
        plotData = plotData %>% 
          filter(y >= startCases) %>% group_by(region) %>% #Filter 10+
          mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
@@ -498,7 +501,7 @@ server <- function(input, output, session) {
      }
      
      #When normalizing cases or deaths per 10,000 residents
-     if(input$relPop == 1 && input$yScale == 1){
+     if(input$relPop == 1 && input$yScale == 1 || input$relPop == 1 && input$view == 1){
        plotData = plotData %>% 
          mutate(y = y / (Population / 10000))
      }
@@ -570,29 +573,45 @@ server <- function(input, output, session) {
     }  
     
     #Labels depend on selections
-    xLabel = ifelse(input$yScale == 1, "Date", 
+    xLabel = ifelse(input$yScale == 1 || input$view == 1, "Date", 
                     paste("Number of Days Since",
                           ifelse(input$outcome == 1, "10th Case", "1st Death")))
     
-    yLabel = ifelse(input$relPop == 1 && input$yScale == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", 
+    yLabel = paste0(ifelse(input$view == 1, "New ",""),
+      ifelse(input$relPop == 1 && input$yScale == 1 || input$relPop == 1 && input$view == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", 
                                                                   "Deaths per 10,000 Residents"), 
-                    ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
+                    ifelse(input$outcome == 1, "Cases", "Deaths")),
+      sep = "")
+    
+    Title = sprintf('%sCOVID-19 %s in %s',
+            ifelse(input$view == 1, "New ", ""),
+            ifelse(input$outcome == 1, "Cases", "Deaths"),
+            case_when(
+              isolate(input$regionType) == "CSA.Title" ~ "U.S. Metropolitan Areas",
+              isolate(input$regionType) == "stateCounty" ~ "U.S. Counties",
+              isolate(input$regionType) == "State_name" ~ "U.S. States",
+              T ~ "the USA"))
+    
+    # specify the limits of the x-axis
+    if(input$yScale == 1 | input$view == 1){
+      if(input$view == 1){
+        if(max(plot$data$x)-min(plot$data$x)<28){
+          xlim = c(min(plot$data$x)+7, Sys.Date())
+        } else {xlim = c(Sys.Date()-21, Sys.Date())}
+      } else {xlim = c(min(plot$data$x), Sys.Date())}
+    }else{
+      xlim = c(0,max(plot$data$x)+2) # added 2 so the label doesn't get cut off
+    }
     
     plot + theme_bw() +
       # Force the y-axis to start at zero
       expand_limits(y = 0) +
       #Update the labs based on the filters
-      labs(title = sprintf('COVID-19 %s in %s', 
-                           ifelse(input$outcome == 1, "Cases", "Deaths"),
-                           case_when(
-                             isolate(input$regionType) == "CSA.Title" ~ "U.S. Metropolitan Areas",
-                             isolate(input$regionType) == "stateCounty" ~ "U.S. Counties",
-                             isolate(input$regionType) == "State_name" ~ "U.S. States",
-                             T ~ "the USA"
-                           )),
+      labs(title = Title,
+           #subtitle = ifelse(input$view == 1, "7-day Moving Average",""),
            caption = isolate(referenceUs1()))  +
       xlab(xLabel) + ylab(yLabel) +
-      coord_cartesian(clip = 'off') + #prevent clipping off labels
+      coord_cartesian(xlim = xlim, clip = 'on') +
       theme(plot.title = element_text(hjust = 0.0),
             legend.position = 'right', legend.direction = "vertical", 
             legend.title = element_blank(), 
