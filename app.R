@@ -18,7 +18,7 @@ if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.or
 if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(tidyr)) install.packages("tidyr", repos = "http://cran.us.r-project.org")
-if(!require(tidyquant)) install.packages("tidyquant", repos = "http://cran.us.r-project.org")
+# if(!require(tidyquant)) install.packages("tidyquant", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -68,20 +68,44 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                          
                          #If use_online_data = F or data not accessible online, use local files
                          if(status_code(test) == 200){
+                           
                            data = read.csv(link, stringsAsFactors = F)
                            # Check to make sure the new data are the format and size that we expect
-                           old.data = read.csv("data/us-counties.csv", stringsAsFactors = F)
+                           old.data = read.csv("data/NYTdata.csv", stringsAsFactors = F)
+                           
                            if(nrow(data) < nrow(old.data) | !identical(colnames(data), colnames(old.data))){
+                             
                              print("The online NYT data was not in the expected format, local data used")
-                             read.csv("data/us-counties.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
-                           } else{ # The online data is good.
-                             write.csv(data, "data/us-counties.csv", row.names = F)
+                             read.csv("data/NYTdata.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
+                           
+                             } else{ # The online data is good.
+                             
+                             #Process the data before saving
+                             data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
+                             data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
+                             
+                             data = data %>%
+                               mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+                                      date = as.Date(date))
+                             
+                             #Add the unknow counties
+                             data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
+                             data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
+                             
+                             data = transform(data, 
+                                              casesDaily = ave(cases, fips, FUN=function(x) x - c(0, head(x, -1))),
+                                              deathsDaily = ave(deaths, fips, FUN=function(x) x - c(0, head(x, -1))))
+                             
                              print("NYT data succesfully refreshed")
+                             write.csv(data, "data/NYTdata.csv", row.names = F)
                              data
+                             
                            } 
                          } else {
+                           
                            print("NYT not accessible online, local data used")
-                           read.csv("data/us-counties.csv", stringsAsFactors = F)
+                           read.csv("data/NYTdata.csv", stringsAsFactors = F)
+                           
                          }
                        })
 
@@ -96,20 +120,44 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                          
                          #If use_online_data = F or data not accessible online, use local files
                          if(status_code(data) == 200){
+                           
                            data = content(data)
-                             # Check to make sure the new data are the format and size that we expect
-                             old.data = read.csv("data/hospitalData.csv", stringsAsFactors = F)
+                           # Check to make sure the new data are the format and size that we expect
+                           old.data = read.csv("data/covidProjectData.csv", stringsAsFactors = F)
+                           
                              if(nrow(data) < nrow(old.data) | !identical(colnames(data), colnames(old.data))){
-                               print("The online covidProjectData was not in the expected format, local data used")
-                               read.csv("data/hospitalData.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
-                             } else{ # The online data is good.
-                               write.csv(data, "data/hospitalData.csv", row.names = F)
-                             print("covidProjectData data succesfully refreshed")
-                             data
+                               
+                               print("The online Covid Project data was not in the expected format, local data used")
+                               read.csv("data/covidProjectData.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
+                             
+                              } else{ # The online data is good.
+                                
+                                #Pre-process the data
+                                data %>% 
+                                  mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
+                                  left_join(popByState, by = c("state" = "State")) %>% 
+                                  select(state,State_name,Population,posNeg,positive,negative,date) %>%
+                                  gather(category,count,-state, -State_name, -Population,-date) %>% 
+                                  left_join(stateReliablilty(), by = "state") %>% 
+                                  filter(grade %in% c("A", "B")) %>% 
+                                  mutate(State_name = paste(State_name, ifelse(grade == "A", "", "*")))
+                                
+                                #Edit the order of the labels by descending y-value
+                                myOrder = data %>% group_by(state, State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
+                                data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
+                                
+                                data %>% ungroup()
+                                
+                                write.csv(data, "data/covidProjectData.csv", row.names = F)
+                                print("Covid Project data data succesfully refreshed")
+                                data
+                                
                              } 
                          } else {
-                           print("covidProjectData not accessible online, local data used")
-                           read.csv("data/hospitalData.csv", stringsAsFactors = F)
+                           
+                           print("Covid Project data not accessible online, local data used")
+                           read.csv("data/covidProjectData.csv", stringsAsFactors = F)
+                           
                          }
                        })
 
@@ -353,26 +401,9 @@ server <- function(input, output, session) {
   covidData = reactive({
     
     data = NYTdata()
-
-    #Add the special cases
-    data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
-    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
-
-    data = data %>%
-      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-             date = as.Date(date))
-
-    #Add the unknow counties
-    data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
-    data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
-    
     updateTime(prettyDate(max(data$date, na.rm = T)))
-    
-    data = transform(data, 
-              casesDaily = ave(cases, fips, FUN=function(x) x - c(0, head(x, -1))),
-              deathsDaily = ave(deaths, fips, FUN=function(x) x - c(0, head(x, -1))))
-
     data  %>% select(-county, - state)
+    
   })
   
   #Update the time on the page
@@ -381,22 +412,8 @@ server <- function(input, output, session) {
   #Load the COVID project data
   hospitalData = reactive({
     
-    data = covidProjectData() %>% 
-      mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
-      left_join(popByState, by = c("state" = "State")) %>% 
-      select(state,State_name,Population,posNeg,positive,negative,date) %>%
-      gather(category,count,-state, -State_name, -Population,-date) %>% 
-      left_join(stateReliablilty(), by = "state") %>% 
-      filter(grade %in% c("A", "B")) %>% 
-      mutate(State_name = paste(State_name, ifelse(grade == "A", "", "*")))
-    
-    updateTimeHospital(prettyDate(max(data$date, na.rm = T)))
-    
-    #Edit the order of the labels by descending y-value
-    myOrder = data %>% group_by(state, State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
-    data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
-
-    data %>% ungroup()
+    updateTimeHospital(prettyDate(max(covidProjectData()$date, na.rm = T)))
+    covidProjectData()
 
   })
   
