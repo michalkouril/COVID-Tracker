@@ -18,6 +18,7 @@ if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.or
 if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(tidyr)) install.packages("tidyr", repos = "http://cran.us.r-project.org")
+# if(!require(tidyquant)) install.packages("tidyquant", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -67,20 +68,52 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                          
                          #If use_online_data = F or data not accessible online, use local files
                          if(status_code(test) == 200){
+                           
                            data = read.csv(link, stringsAsFactors = F)
                            # Check to make sure the new data are the format and size that we expect
-                           old.data = read.csv("data/us-counties.csv", stringsAsFactors = F)
-                           if(nrow(data) < nrow(old.data) | !identical(colnames(data), colnames(old.data))){
+                           old.data = read.csv("data/NYTdata.csv", stringsAsFactors = F, 
+                                               colClasses = list(fips = "character"))
+                           if(nrow(data) < nrow(old.data) | length(setdiff(colnames(data), colnames(old.data))) > 0){ 
+                             
                              print("The online NYT data was not in the expected format, local data used")
-                             read.csv("data/us-counties.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
-                           } else{ # The online data is good.
-                             write.csv(data, "data/us-counties.csv", row.names = F)
+                             read.csv("data/NYTdata.csv", stringsAsFactors = F, 
+                                      colClasses = list(fips = "character", date = "Date")) # The online data did not pass the check, so use the old data to be safe.
+                           
+                            } else { # The online data is good.
+                             
+                             #Process the data before saving
+                             data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
+                             data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
+                             
+                             data = data %>%
+                               mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
+                                      date = as.Date(date)) 
+
+                             #Add the unknow counties
+                             data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
+                             data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips)) %>% select(-FIPS) %>% 
+                               arrange(fips, desc(date))
+                             
+                             #Get the cases / deaths average per day and remove few columns
+                             data = data %>% group_by(fips) %>% 
+                               mutate(casesDaily = movingAvg(cases - lead(cases, default = 0)),
+                                      deathsDaily = movingAvg(deaths - lead(deaths, default = 0)),
+                                      casesDaily_w = movingAvg(cases - lead(cases, default = 0), weighted = T),
+                                      deathsDaily_w = movingAvg(deaths - lead(deaths, default = 0), weighted = T)) %>% 
+                               select(-county, - state)
+
                              print("NYT data succesfully refreshed")
+                             write.csv(data, "data/NYTdata.csv", row.names = F)
+
                              data
+                             
                            } 
                          } else {
+                           
                            print("NYT not accessible online, local data used")
-                           read.csv("data/us-counties.csv", stringsAsFactors = F)
+                           read.csv("data/NYTdata.csv", stringsAsFactors = F, 
+                                    colClasses = list(fips = "character", date = "Date"))
+     
                          }
                        })
 
@@ -95,20 +128,46 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                          
                          #If use_online_data = F or data not accessible online, use local files
                          if(status_code(data) == 200){
+                           
                            data = content(data)
-                             # Check to make sure the new data are the format and size that we expect
-                             old.data = read.csv("data/hospitalData.csv", stringsAsFactors = F)
-                             if(nrow(data) < nrow(old.data) | !identical(colnames(data), colnames(old.data))){
-                               print("The online covidProjectData was not in the expected format, local data used")
-                               read.csv("data/hospitalData.csv", stringsAsFactors = F) # The online data did not pass the check, so use the old data to be safe.
-                             } else{ # The online data is good.
-                               write.csv(data, "data/hospitalData.csv", row.names = F)
-                             print("covidProjectData data succesfully refreshed")
-                             data
-                             } 
+                           # Check to make sure the new data are the format and size that we expect
+                           old.data = read.csv("data/covidProjectData.csv", stringsAsFactors = F)
+                           
+                            if(nrow(data) * 3 < nrow(old.data) | 
+                                  length(setdiff(c("date", "state", "positive", "negative", "posNeg"), colnames(data))) > 0) {
+                                 
+                                 print("The online Covid Project data was not in the expected format, local data used")
+                                 read.csv("data/covidProjectData.csv", stringsAsFactors = F)
+                               
+                            } else{ # The online data is good.
+                              
+                              dataReliability = read.csv("data/dataReliability.csv", stringsAsFactors = F)
+                              
+                              #Pre-process the data
+                              data = data %>% 
+                                mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
+                                left_join(popByState, by = c("state" = "State")) %>% 
+                                select(state,State_name,Population,posNeg,positive,negative,date) %>%
+                                gather(category,count,-state, -State_name, -Population,-date) %>% 
+                                left_join(dataReliability, by = "state") %>% 
+                                filter(grade %in% c("A", "B")) %>% 
+                                mutate(State_name = paste(State_name, ifelse(grade == "A", "", "*")))
+                              
+                              #Edit the order of the labels by descending y-value
+                              myOrder = data %>% group_by(state, State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
+                              data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
+                              
+                              write.csv(data, "data/covidProjectData.csv", row.names = F)
+                              print("Covid Project data data succesfully refreshed")
+                              data %>% ungroup()
+                              
+                           } 
                          } else {
-                           print("covidProjectData not accessible online, local data used")
-                           read.csv("data/hospitalData.csv", stringsAsFactors = F)
+                           
+                           print("Covid Project data not accessible online, local data used")
+                           read.csv("data/covidProjectData.csv", stringsAsFactors = F,
+                                    colClasses = list(date = "Date"))
+                           
                          }
                        })
 
@@ -124,19 +183,39 @@ dataReliability = reactivePoll(intervalMillis = 8.6E+7, session = NULL, checkFun
                       
                       #If use_online_data = F or data not accessible online, use local files
                       if(status_code(data) == 200){
+                        
                         data = content(data)
-                        write.csv(data, "data/dataReliability.csv", row.names = F)
+                        write.csv(data %>% select(state, grade), "data/dataReliability.csv", row.names = F)
                         print("Reliability data succesfully refreshed")
                         data
+                        
                       } else {
+                        
                         print("Reliability data not accessible online, local data used")
                         read.csv("data/dataReliability.csv", stringsAsFactors = F)
+                        
                       }
                     })
 
 
 # ---- Functions ----
 #********************
+
+#Moving average for daily data
+movingAvg = function(x, lag = 6, weighted = F){
+  
+  sapply(1:length(x), function(i){
+    
+    minPos = max(1, i - lag)
+    if(weighted){
+      sum(x[minPos:i] * (1:(i-minPos+1) / sum(1:(i-minPos+1))))
+    } else {
+      mean(x[minPos:i])
+    }
+    
+  })
+  
+}
 
 #Function used to generate the doubleing rate guide
 doubleRate = function(x, startCases = 10, daysToDouble = 3, population = 10000, perHowMany = 10000) {
@@ -208,9 +287,13 @@ ui <- tagList(
                     helpText('Tip: type the name for easy searching'),hr()
                   ),
                   radioButtons("outcome", "Data", list("Cases" = 1, "Deaths" = 2), inline = T),
-                  radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
+                  radioButtons("view", "View", list("Daily_ma" = 1, "Cumulative" = 2, "Daily_wma" = 3), inline = T, selected = 2),
                   conditionalPanel(
-                    condition = "input.yScale == 1",  
+                    condition = "input.view == 2",
+                    radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T)
+                  ),
+                  conditionalPanel(
+                    condition = "input.yScale == 1 || input.view == 1",  
                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
                   ),
                   tags$br(),
@@ -326,8 +409,8 @@ ui <- tagList(
 #*****************
 server <- function(input, output, session) {
   
-  updateTime = reactiveVal(Sys.time())
-  updateTimeHospital = reactiveVal(Sys.time())
+  updateTime = reactiveVal()
+  updateTimeHospital = reactiveVal()
   filterWarning = reactiveVal("")
   filterWarningTest = reactiveVal("")
   regionTest = reactiveVal("")
@@ -344,59 +427,17 @@ server <- function(input, output, session) {
                                "\nShowing data through: ", isolate(updateTimeHospital()),
                                "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
   
-  #Load the NYT data
-  covidData = reactive({
-    
-    data = NYTdata()
-
-    #Add the special cases
-    data[data$county == "New York City" & data$state == "New York","fips"] = "36124" #NYC
-    data[data$county == "Kansas City" & data$state == "Missouri","fips"] = "29511" #Kansas City
-
-    data = data %>%
-      mutate(fips = as.character(fips), fips = ifelse(nchar(fips) < 5, paste0(0, fips), fips),
-             date = as.Date(date))
-
-    #Add the unknow counties
-    data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
-    data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips))%>% select(-FIPS)
-    
+  observeEvent(c(NYTdata(), covidProjectData()),{
     updateTime(prettyDate(max(data$date, na.rm = T)))
-
-    data  %>% select(-county, - state)
+    updateTimeHospital(prettyDate(max(covidProjectData()$date, na.rm = T)))
   })
-  
+
   #Update the time on the page
   output$updateTime = renderText(updateTime())
 
-  #Load the COVID project data
-  hospitalData = reactive({
-    
-    data = covidProjectData() %>% 
-      mutate(date = as.Date(as.character(date), format = "%Y%m%d")) %>%
-      left_join(popByState, by = c("state" = "State")) %>% 
-      select(state,State_name,Population,posNeg,positive,negative,date) %>%
-      gather(category,count,-state, -State_name, -Population,-date) %>% 
-      left_join(stateReliablilty(), by = "state") %>% 
-      filter(grade %in% c("A", "B")) %>% 
-      mutate(State_name = paste(State_name, ifelse(grade == "A", "", "*")))
-    
-    updateTimeHospital(prettyDate(max(data$date, na.rm = T)))
-    
-    #Edit the order of the labels by descending y-value
-    myOrder = data %>% group_by(state, State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
-    data$State_name = factor(data$State_name, levels = c(myOrder$State_name))
 
-    data %>% ungroup()
-
-  })
-  
-  stateReliablilty = reactive({
-    dataReliability() %>% select(state, grade)
-  })
-  
   #Update the time on the page
-  output$updateTimeHospital = renderText({prettyDate(max(hospitalData()$date, na.rm = T))})
+  output$updateTimeHospital = renderText({prettyDate(max(covidProjectData()$date, na.rm = T))})
   
   observeEvent(input$regionType, {
     if(input$regionType == "CSA.Title"){
@@ -425,14 +466,22 @@ server <- function(input, output, session) {
      
      startCases = ifelse(input$outcome == 1, 10, 1)
 
-     #This will be used later when we can select different region levels (e.g. county, state, ...)
+     #Select different region levels (e.g. county, state, ...)
      groupByRegion = sym(isolate(input$regionType))
-     outcome = sym(ifelse(input$outcome == 1, "cases", "deaths"))
+     outcome = sym(
+                     if(input$view == 1){
+                       ifelse(input$outcome == 1, "casesDaily", "deathsDaily")
+                     } else if(input$view == 3){
+                       ifelse(input$outcome == 1, "casesDaily_w", "deathsDaily_w")
+                     } else {
+                       ifelse(input$outcome == 1, "cases", "deaths")
+                     }
+                   )
      
      #If working by date, crop the data
-     covidNumbers = covidData() 
+     covidNumbers = NYTdata() 
      if(input$yScale == 1){
-       covidNumbers = covidNumbers%>% filter(between(date, Sys.Date()-21, Sys.Date()))
+       covidNumbers = covidNumbers%>% filter(between(date, Sys.Date()-28, Sys.Date()))
      }
      
      #Build the data for the plot
@@ -441,7 +490,9 @@ server <- function(input, output, session) {
        select(region = !!groupByRegion, FIPS) %>% 
        left_join(covidNumbers, by = c("FIPS" = "fips")) %>% #Join the cases per fips
        filter(!is.na(date)) %>% group_by(region, date) %>% #Now group per region
-       summarise(cases = sum(cases), deaths = sum(deaths)) 
+       summarise(cases = sum(cases), deaths = sum(deaths), 
+                 casesDaily = sum(casesDaily), deathsDaily = sum(deathsDaily),
+                 casesDaily_w = sum(casesDaily_w), deathsDaily_w = sum(deathsDaily_w)) 
 
      if(isolate(input$regionType) == "CSA.Title"){
        plotData = plotData %>% 
@@ -468,7 +519,7 @@ server <- function(input, output, session) {
      
      #In case the plot needs to show starting from 10 cases
      omitted = NULL
-     if(input$yScale == 2){
+     if(input$yScale == 2 && input$view == 2){
        plotData = plotData %>% 
          filter(y >= startCases) %>% group_by(region) %>% #Filter 10+
          mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
@@ -494,7 +545,7 @@ server <- function(input, output, session) {
      #Edit the order of the labels by descending y-value
      myOrder = plotData %>% group_by(region) %>% summarise(y = max(y)) %>% arrange(desc(y))
      plotData$region = factor(plotData$region, levels = c(myOrder$region))
-    
+
      plotData %>% ungroup()
      
   })
@@ -504,9 +555,16 @@ server <- function(input, output, session) {
     
     startCases = ifelse(input$outcome == 1, 10, 1)
     
-    plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) +
-      geom_line(size = 1.2)
+    plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) 
     
+    # Show the labels for the most recent value if displaying the cumulative data.
+    plot = plot + geom_line(size = 1.2) +
+      #Add the latest counts at the end of the curve
+      geom_text(data = plot.data() %>% filter(date == last(date)), 
+                aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
+                {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
+                x = x, y = y), size = 5, check_overlap = T,hjust=0, vjust=0.5)
+
     #Guide for doubling time
     if(input$yScale == 2){ #Only relevant when aligned by number of starting cases
       
@@ -516,62 +574,81 @@ server <- function(input, output, session) {
                    10000)
       
       
-      #Generate the doubline time using the doubleRate function (see at top)
-      if(input$yScale == 2){
-        plot = plot + 
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 1, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
-          stat_function(fun = ~log10(doubleRate(.x, startCases, 7, pop)),
-                        linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
-          
-        oneDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 1, startCases = startCases)
-        twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
-        threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
-        sevenDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 7, startCases = startCases)
+        #Generate the doubline time using the doubleRate function (see at top)
+        if(input$yScale == 2 && input$view == 2){
+          plot = plot + 
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 1, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 2, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 3, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3) +
+            stat_function(fun = ~log10(doubleRate(.x, startCases, 7, pop)),
+                          linetype="dashed", colour = "#8D8B8B", size = 1.0, alpha = 0.3)
+            
+          oneDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 1, startCases = startCases)
+          twoDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 2, startCases = startCases)
+          threeDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 3, startCases = startCases)
+          sevenDayLabel = labelPos(max(plot$data$x),max(plot$data$y), daysToDouble = 7, startCases = startCases)
+        
+        plot = plot +
+          annotate("text", x = oneDayLabel$posX, y = oneDayLabel$posY, label = "Doubles every day", color = "#8D8B8B") +
+          annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
+          annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
+          annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
+          scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
+        
+      } else { # Don't include the reference lines if plotting new cases/deaths per day
+        plot = plot + scale_y_continuous(labels = comma)
       }
-      
-      plot = plot +
-        annotate("text", x = oneDayLabel$posX, y = oneDayLabel$posY, label = "Doubles every day", color = "#8D8B8B") +
-        annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
-        annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
-        annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
-        scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
-      
-    } else {
-      plot = plot + scale_y_continuous(labels = comma)
-    }
+    }  
     
     #Labels depend on selections
-    xLabel = ifelse(input$yScale == 1, "Date", 
+    xLabel = ifelse(input$yScale == 1 || input$view == 1, "Date", 
                     paste("Number of Days Since",
                           ifelse(input$outcome == 1, "10th Case", "1st Death")))
     
-    yLabel = ifelse(input$relPop == 1 && input$yScale == 1,ifelse(input$outcome == 1, "Cases per 10,000 Residents", 
-                                                                  "Deaths per 10,000 Residents"), 
-                    ifelse(input$outcome == 1, "Confirmed Cases", "Deaths"))
+    # yLabel = paste0(ifelse(input$view == 1, "New ",""),
+    #   ifelse(input$relPop == 1 && input$yScale == 1 || input$relPop == 1 && 
+    #            input$view == 1,ifelse(input$outcome == 1, 
+    #                                   "Cases per 10,000 Residents", "Deaths per 10,000 Residents"), 
+    #                 ifelse(input$outcome == 1, "Cases", "Deaths")),
+    #   sep = "")
+    
+    yLabel = case_when(
+      input$view %in% c(1,3) ~ "Average Daily",
+      TRUE ~ "Total"
+    )
+    
+    yLabel = paste(yLabel, case_when(
+      input$outcome == 1 ~ "Cases",
+      TRUE ~ "Deaths"
+    ))
+    
+    yLabel = paste(yLabel, case_when(
+      input$relPop == 1 ~ "per 10,000 Residents",
+      TRUE ~ ""
+    ))
+    
+    
+    Title = sprintf('%sCOVID-19 %s in %s',
+            ifelse(input$view == 1, "New ", ""),
+            ifelse(input$outcome == 1, "Cases", "Deaths"),
+            case_when(
+              isolate(input$regionType) == "CSA.Title" ~ "U.S. Metropolitan Areas",
+              isolate(input$regionType) == "stateCounty" ~ "U.S. Counties",
+              isolate(input$regionType) == "State_name" ~ "U.S. States",
+              T ~ "the USA"))
     
     plot + theme_bw() +
-      #Add the latest counts at the end of the curve
-      geom_text(data = plot.data() %>% filter(date == last(date)), 
-                aes(label = if(input$relPop == 1){format(round(y, 2), big.mark = ",", nsmall = 2)} else 
-                  {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
-                    x = x, y = y), size = 5, check_overlap = T,hjust=0, vjust=0.5) +
+      # Force the y-axis to start at zero
+      expand_limits(y = 0) +
       #Update the labs based on the filters
-      labs(title = sprintf('COVID-19 %s in %s', 
-                           ifelse(input$outcome == 1, "Cases", "Deaths"),
-                           case_when(
-                             isolate(input$regionType) == "CSA.Title" ~ "U.S. Metropolitan Areas",
-                             isolate(input$regionType) == "stateCounty" ~ "U.S. Counties",
-                             isolate(input$regionType) == "State_name" ~ "U.S. States",
-                             T ~ "the USA"
-                           )),
+      labs(title = Title,
+           #subtitle = ifelse(input$view == 1, "7-day Moving Average",""),
            caption = isolate(referenceUs1()))  +
       xlab(xLabel) + ylab(yLabel) +
-      coord_cartesian(clip = 'off') + #prevent clipping off labels
+      coord_cartesian(clip = 'off') +
       theme(plot.title = element_text(hjust = 0.0),
             legend.position = 'right', legend.direction = "vertical", 
             legend.title = element_blank(), 
@@ -626,7 +703,7 @@ server <- function(input, output, session) {
      req(!is.null(input$testState))
      
      #Filter the hospitalData based on user selections
-     myData = hospitalData() %>% filter(State_name %in% input$testState) %>% 
+     myData = covidProjectData() %>% filter(State_name %in% input$testState) %>% 
        filter(category %in% input$testCurve) %>%
        #select(State_name, date, y = !!sym(input$testCurve)) %>% 
        filter(count > 0)
@@ -710,8 +787,8 @@ server <- function(input, output, session) {
    # ---- RANKING TABLES ----
    #*************************
    allRankingData = reactive({
-     latestDate = max(covidData()$date)
-     data = covidData() %>% filter(date == latestDate) %>% 
+     latestDate = max(NYTdata()$date)
+     data = NYTdata() %>% filter(date == latestDate) %>% 
        select(fips, cases, deaths)
      colnames(data)[colnames(data) %in% c('cases','deaths')] <- c('Cases', 'Deaths')
      
@@ -776,7 +853,7 @@ server <- function(input, output, session) {
      if(input$rankItem == "Tests"){
        print("HELLO")
        #Only keep the states for which the data is class A or B
-       hospitalData() %>% ungroup() %>% 
+       covidProjectData() %>% ungroup() %>% 
          filter(date == max(date)) %>% 
          spread(category, count) %>% arrange(desc(posNeg)) %>% 
          mutate(Ranking = 1:n(),
@@ -816,13 +893,13 @@ server <- function(input, output, session) {
                   The following states and territories had insufficient reporting and were not included: %s.<br><br>
 * Indicates that the state's reporting of test results is sub-optimal and should be interpreted with care. For more information, visit the 
                   <a href='https://covidtracking.com/about-data'>COVID-Tracking Project</a>'s website.<br><br>",
-                  paste(stateReliablilty() %>% filter(!grade %in% c("A", "B")) %>% 
+                  paste(dataReliability() %>% filter(!grade %in% c("A", "B")) %>% 
                           pull(state) %>% sort(), collapse = ", ")))
    })
    
    output$stateCommentsT = renderUI({
-     updateSelectInput(session, "testState", choices = hospitalData()$State_name, 
-                       selected = hospitalData()$State_name[str_detect(hospitalData()$State_name, "New York")])
+     updateSelectInput(session, "testState", choices = covidProjectData()$State_name, 
+                       selected = covidProjectData()$State_name[str_detect(covidProjectData()$State_name, "New York")])
      stateComments()
    })
    
