@@ -428,7 +428,7 @@ server <- function(input, output, session) {
                                "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
   
   observeEvent(c(NYTdata(), covidProjectData()),{
-    updateTime(prettyDate(max(data$date, na.rm = T)))
+    updateTime(prettyDate(max(NYTdata()$date, na.rm = T)))
     updateTimeHospital(prettyDate(max(covidProjectData()$date, na.rm = T)))
   })
 
