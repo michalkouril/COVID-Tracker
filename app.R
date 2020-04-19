@@ -73,7 +73,7 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                            # Check to make sure the new data are the format and size that we expect
                            old.data = read.csv("data/NYTdata.csv", stringsAsFactors = F, 
                                                colClasses = list(fips = "character"))
-                           if(nrow(data) < nrow(old.data) | length(setdiff(colnames(data), colnames(old.data))) > 0){ 
+                           if(nrow(data) < nrow(old.data) | length(setdiff(c('date','county','state','fips','cases','deaths'), colnames(data))) > 0){ 
                              
                              print("The online NYT data was not in the expected format, local data used")
                              read.csv("data/NYTdata.csv", stringsAsFactors = F, 
