@@ -553,7 +553,7 @@ server <- function(input, output, session) {
     startCases = plot.data() %>% group_by(region) %>% filter(date == min(date)) %>% pull(y) %>% mean()
 
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) 
-    
+    test <<- plot.data()
     # Show the labels for the most recent value if displaying the cumulative data.
     plot = plot + geom_line(size = 1.2) +
       #Add the latest counts at the end of the curve
@@ -564,7 +564,7 @@ server <- function(input, output, session) {
     
     #Guide for doubling time  
     #Generate the doubline time using the doubleRate function (see at top)
-    if(input$yScale == 2 && length(unique(plot.data()$region)) == 1){
+    if(input$yScale == 2 ){ # && length(unique(plot.data()$region)) == 1
       #If the population is relative, make sure the guide is too (is average population of ones shown)
       pop = ifelse(F, 
                    mean(plot.data() %>% group_by(region) %>% summarise(p = max(Population)) %>% pull(p)),
@@ -590,9 +590,9 @@ server <- function(input, output, session) {
         annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
         annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
         annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
-        scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
+        scale_y_log10(labels = function(x) number(x, big.mark = ",", accuracy = .01), limits = c(NA, max(plot$data$y)))
     } else if(input$yScale == 2){
-      plot = plot + scale_y_log10(labels = comma)
+      plot = plot + scale_y_log10(labels = function(x) number(x, big.mark = ",", accuracy = .01))
     }
     
 
@@ -603,19 +603,19 @@ server <- function(input, output, session) {
     
     if(input$yScale == 1){
       
-      xLabel = "date"
+      xLabel = "Date"
       
     } else {
       
       xLabel = case_when(
-        input$view == 2 ~ "Days since",
-        TRUE ~ "Days since first time"
+        input$view == 2 ~ "Days Since",
+        TRUE ~ "Days Since First Time"
       )
 
       xLabel = sprintf(paste(xLabel, case_when(
-        input$outcome == 2 ~ "1 %s death",
-        TRUE ~ "10 %s cases"
-      )), ifelse(input$view == 1, "daily", ""))
+        input$outcome == 2 ~ "1 %s Death",
+        TRUE ~ "10 %s Cases"
+      )), ifelse(input$view == 1, "Daily", ""))
     
     }
 
