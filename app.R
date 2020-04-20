@@ -92,14 +92,14 @@ NYTdata = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFunc = func
                              #Add the unknow counties
                              data = data %>% left_join(unknownCounties %>% select(-state), by = c("state" = "stateName", "county"))
                              data = data %>% mutate(fips = ifelse(is.na(fips), FIPS, fips)) %>% select(-FIPS) %>% 
-                               arrange(fips, desc(date))
-                             
+                               arrange(fips, date)
+
                              #Get the cases / deaths average per day and remove few columns
                              data = data %>% group_by(fips) %>% 
-                               mutate(casesDaily = movingAvg(cases - lead(cases, default = 0)),
-                                      deathsDaily = movingAvg(deaths - lead(deaths, default = 0)),
-                                      casesDaily_w = movingAvg(cases - lead(cases, default = 0), weighted = T),
-                                      deathsDaily_w = movingAvg(deaths - lead(deaths, default = 0), weighted = T)) %>% 
+                               mutate(casesDaily = movingAvg(cases - lag(cases, default = 0)),
+                                      deathsDaily = movingAvg(deaths - lag(deaths, default = 0)),
+                                      casesDaily_w = movingAvg(cases - lag(cases, default = 0), weighted = T),
+                                      deathsDaily_w = movingAvg(deaths - lag(deaths, default = 0), weighted = T)) %>% 
                                select(-county, - state)
                              
                              print("NYT data succesfully refreshed")
@@ -206,11 +206,11 @@ movingAvg = function(x, lag = 6, weighted = F){
   
   sapply(1:length(x), function(i){
     
-    maxPos = max(i, min((i + lag), length(x)))
+    minPos = max(1, i - lag)
     if(weighted){
-      sum(x[i:maxPos] * (1:(maxPos-i+1) / sum(1:(maxPos-i+1))))
+      sum(x[minPos:i] * (1:(i-minPos+1) / sum(1:(i-minPos+1))))
     } else {
-      mean(x[i:maxPos])
+      mean(x[minPos:i])
     }
     
   })
