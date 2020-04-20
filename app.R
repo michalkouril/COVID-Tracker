@@ -553,7 +553,7 @@ server <- function(input, output, session) {
     startCases = plot.data() %>% group_by(region) %>% filter(date == min(date)) %>% pull(y) %>% mean()
 
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) 
-    test <<- plot.data()
+
     # Show the labels for the most recent value if displaying the cumulative data.
     plot = plot + geom_line(size = 1.2) +
       #Add the latest counts at the end of the curve
