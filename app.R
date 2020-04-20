@@ -289,10 +289,7 @@ ui <- tagList(
                                      radioButtons("outcome", "Data", list("Cases" = 1, "Deaths" = 2), inline = T),
                                      radioButtons("view", "View", list("Daily" = 1, "Cumulative" = 2), inline = T, selected = 2),
                                      radioButtons("yScale", "Scale", list("Linear" = 1, "Logarithmic" = 2), inline = T),
-                                     conditionalPanel(
-                                       condition = "input.yScale == 1",  
-                                       radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2)
-                                     ),
+                                     radioButtons("relPop", "Adjust for population size", list("Yes" = 1, "No" = 2), inline = T, selected = 2),
                                      tags$br(),
                                      downloadButton("downloadCasesPlot", "Download plot"),
                                      tags$div(textOutput("filterWarnings"), style = "color: red;"),
@@ -379,7 +376,7 @@ ui <- tagList(
                         HTML(paste0("<sup>5</sup>Department of Biomedical Informatics, Harvard Medical School, Boston, MA, USA", sep = "")),tags$br(), 
                         HTML(paste0("<sup>6</sup>Division of Emergency Medicine, Cincinnati Children’s Hospital Medical Center, Cincinnati, OH, USA", sep = "")),
                         tags$br(),tags$br(),tags$h4("Citation"),
-                        HTML("Wissel BD, Van Camp PJ, Kouril M, Weis C, Glauser TA, White PS, Kohane IS, Dexheimer JW. An Interactive Online Dashboard for Tracking COVID-19 in U.S. Counties, Cities, and States in Real-Time. 2020. Under Review."),
+                        HTML("Wissel BD, Van Camp PJ, Kouril M, Weis C, Glauser TA, White PS, Kohane IS, Dexheimer JW. An Interactive Online Dashboard for Tracking COVID-19 in U.S. Counties, Cities, and States in Real-Time. JAMIA. 2020. In Press."),
                         tags$br(),tags$br(),tags$h4("Contact"),
                         HTML('<b>Benjamin Wissel</b><br>Email: <a href="mailto:benjamin.wissel@cchmc.org?Subject=About%20COVID19%20WATCHER" target="_top">benjamin.wissel@cchmc.org</a>'),
                         tags$br(),
@@ -534,7 +531,7 @@ server <- function(input, output, session) {
     }
     
     #When normalizing cases or deaths per 10,000 residents
-    if(input$relPop == 1 && input$yScale == 1){
+    if(input$relPop == 1){
       plotData = plotData %>% 
         mutate(y = y / (Population / 10000))
     }
@@ -564,7 +561,7 @@ server <- function(input, output, session) {
     
     #Guide for doubling time  
     #Generate the doubline time using the doubleRate function (see at top)
-    if(input$yScale == 2 && input$view == 2){
+    if(input$yScale == 2 && input$view == 2 && input$relPop == 2){
       #If the population is relative, make sure the guide is too (is average population of ones shown)
       pop = ifelse(F, 
                    mean(plot.data() %>% group_by(region) %>% summarise(p = max(Population)) %>% pull(p)),
@@ -594,7 +591,7 @@ server <- function(input, output, session) {
     }
     
     # Scale the daily plot to log
-    if(input$yScale == 2 && input$view == 1){ #Only relevant when aligned by number of starting cases
+    if(input$yScale == 2 && input$view == 1 || input$yScale == 2 && input$relPop == 1){ #Only relevant when aligned by number of starting cases
       plot = plot + scale_y_log10(labels = comma)
     }
     
