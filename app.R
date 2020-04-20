@@ -474,7 +474,7 @@ server <- function(input, output, session) {
     
     #If working by date, crop the data
     covidNumbers = NYTdata() 
-    if(input$yScale == 1 || input$view == 1){
+    if(input$yScale == 1){
       covidNumbers = covidNumbers%>% filter(between(date, Sys.Date()-28, Sys.Date()))
     }
     
@@ -502,6 +502,7 @@ server <- function(input, output, session) {
         left_join(popByCountry, by = c("region" = "Country"))
     }
     
+    
     plotData = plotData %>% ungroup() %>% 
       mutate(x = date, y = !!outcome) %>% #add the population per region
       filter(y > 0) #Only show cases / deaths more than 0
@@ -511,14 +512,15 @@ server <- function(input, output, session) {
       req(F)
     }
     
+    test = sym(ifelse(input$outcome == 1, "cases", "deaths"))
     #In case the plot needs to show starting from 10 cases
     omitted = NULL
-    if(input$yScale == 2 && input$view == 2){
+    if(input$yScale == 2){
       plotData = plotData %>% 
         filter(y >= startCases) %>% group_by(region) %>% #Filter 10+
         mutate(x = 1:n() - 1) #Assign a number from 0 - n (days after first 10)
     }
-    
+
     omitted = setdiff(input$region, plotData$region %>% unique()) #Regions that have < 10 cases in total
     
     #Update warning if needed
@@ -547,8 +549,9 @@ server <- function(input, output, session) {
   # ---- Generate Cases / Deaths plot ---
   casesPlot = reactive({
     
-    startCases = ifelse(input$outcome == 1, 10, 1)
-    
+    # startCases = ifelse(input$outcome == 1, 10, 1)
+    startCases = plot.data() %>% group_by(region) %>% filter(date == min(date)) %>% pull(y) %>% mean()
+
     plot = ggplot(plot.data(), aes(x=x, y=y, color = region)) 
     
     # Show the labels for the most recent value if displaying the cumulative data.
@@ -561,7 +564,7 @@ server <- function(input, output, session) {
     
     #Guide for doubling time  
     #Generate the doubline time using the doubleRate function (see at top)
-    if(input$yScale == 2 && input$view == 2 && input$relPop == 2){
+    if(input$yScale == 2 && length(unique(plot.data()$region)) == 1){
       #If the population is relative, make sure the guide is too (is average population of ones shown)
       pop = ifelse(F, 
                    mean(plot.data() %>% group_by(region) %>% summarise(p = max(Population)) %>% pull(p)),
@@ -588,25 +591,34 @@ server <- function(input, output, session) {
         annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
         annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
         scale_y_log10(labels = comma, limits = c(NA, max(plot$data$y)))
-    }
-    
-    # Scale the daily plot to log
-    if(input$yScale == 2 && input$view == 1 || input$yScale == 2 && input$relPop == 1){ #Only relevant when aligned by number of starting cases
+    } else if(input$yScale == 2){
       plot = plot + scale_y_log10(labels = comma)
     }
     
+
     #Labels depend on selections
     xLabel = ifelse(input$yScale == 1 || input$view == 1, "Date", 
                     paste("Number of Days Since",
                           ifelse(input$outcome == 1, "10th Case", "1st Death")))
     
-    # yLabel = paste0(ifelse(input$view == 1, "New ",""),
-    #   ifelse(input$relPop == 1 && input$yScale == 1 || input$relPop == 1 && 
-    #            input$view == 1,ifelse(input$outcome == 1, 
-    #                                   "Cases per 10,000 Residents", "Deaths per 10,000 Residents"), 
-    #                 ifelse(input$outcome == 1, "Cases", "Deaths")),
-    #   sep = "")
+    if(input$yScale == 1){
+      
+      xLabel = "date"
+      
+    } else {
+      
+      xLabel = case_when(
+        input$view == 2 ~ "Days since",
+        TRUE ~ "Days since first time"
+      )
+
+      xLabel = sprintf(paste(xLabel, case_when(
+        input$outcome == 2 ~ "1 %s death",
+        TRUE ~ "10 %s cases"
+      )), ifelse(input$view == 1, "daily", ""))
     
+    }
+
     yLabel = case_when(
       input$view %in% c(1,3) ~ "Daily",
       TRUE ~ "Total"
