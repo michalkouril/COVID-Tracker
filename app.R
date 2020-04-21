@@ -562,6 +562,11 @@ server <- function(input, output, session) {
                 {format(round(y, 0), big.mark = ",", nsmall = 0)}, 
                 x = x, y = y), size = 5, check_overlap = T,hjust=0, vjust=0.5)
     
+    # Add comma to y-axis tick marks on linear plot
+    if(input$yScale == 1){
+      plot = plot + scale_y_continuous(labels = function(x) number(x, big.mark = ","))
+    }
+    
     #Guide for doubling time  
     #Generate the doubline time using the doubleRate function (see at top)
     if(input$yScale == 2 && input$view == 2){ # && length(unique(plot.data()$region)) == 1
