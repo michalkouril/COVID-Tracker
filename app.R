@@ -413,13 +413,13 @@ server <- function(input, output, session) {
                                 "Data from The New York Times, based on reports from state and local health agencies.\n",
                                 "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
                                 "\nShowing data through: ", isolate(updateTime()),
-                                "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
+                                "\nhttps://www.covid19watcher.com", sep = ""))
   
   referenceUs2 = reactive(paste("Authors: Benjamin Wissel and PJ Van Camp, MD\n",
                                 "Data from 'The COVID Tracking Project'\n",
                                 "Plot created: ", str_replace(input$clientTime, ":\\d+\\s", " "), 
                                 "\nShowing data through: ", isolate(updateTimeHospital()),
-                                "\nhttps://covid19watcher.research.cchmc.org", sep = ""))
+                                "\nhttps://www.covid19watcher.com", sep = ""))
   
   observeEvent(c(NYTdata(), covidProjectData()),{
     updateTime(prettyDate(max(NYTdata()$date, na.rm = T)))
