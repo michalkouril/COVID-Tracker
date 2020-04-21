@@ -564,7 +564,7 @@ server <- function(input, output, session) {
     
     #Guide for doubling time  
     #Generate the doubline time using the doubleRate function (see at top)
-    if(input$yScale == 2 ){ # && length(unique(plot.data()$region)) == 1
+    if(input$yScale == 2 && input$view == 2){ # && length(unique(plot.data()$region)) == 1
       #If the population is relative, make sure the guide is too (is average population of ones shown)
       pop = ifelse(F, 
                    mean(plot.data() %>% group_by(region) %>% summarise(p = max(Population)) %>% pull(p)),
@@ -590,9 +590,9 @@ server <- function(input, output, session) {
         annotate("text", x = twoDayLabel$posX, y = twoDayLabel$posY, label = "...every 2 days", color = "#8D8B8B") +
         annotate("text", x = threeDayLabel$posX, y = threeDayLabel$posY, label = "...every 3 days", color = "#8D8B8B") + 
         annotate("text", x = sevenDayLabel$posX, y = sevenDayLabel$posY, label = "...every week", color = "#8D8B8B") + 
-        scale_y_log10(labels = function(x) number(x, big.mark = ",", accuracy = .01), limits = c(NA, max(plot$data$y)))
-    } else if(input$yScale == 2){
-      plot = plot + scale_y_log10(labels = function(x) number(x, big.mark = ",", accuracy = .01))
+        scale_y_log10(labels = function(x) number(x, big.mark = ","), limits = c(NA, max(plot$data$y)))
+    } else if(input$yScale == 2 && input$view == 1){
+      plot = plot + scale_y_log10(labels = function(x) number(x, big.mark = ","))
     }
     
 
@@ -609,13 +609,13 @@ server <- function(input, output, session) {
       
       xLabel = case_when(
         input$view == 2 ~ "Days Since",
-        TRUE ~ "Days Since First Time"
+        TRUE ~ "Days Since 7-Day Average Passed"
       )
 
       xLabel = sprintf(paste(xLabel, case_when(
-        input$outcome == 2 ~ "1 %s Death",
-        TRUE ~ "10 %s Cases"
-      )), ifelse(input$view == 1, "Daily", ""))
+        input$outcome == 2 ~ "1 %sDeath",
+        TRUE ~ "10 %sCases"
+      )), ifelse(input$view == 1, "Daily ", ""))
     
     }
 
