@@ -18,6 +18,7 @@ if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.or
 if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(tidyr)) install.packages("tidyr", repos = "http://cran.us.r-project.org")
+if(!require(jsonlite)) install.packages("jsonlite", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -437,37 +438,41 @@ server <- function(input, output, session) {
   
   #Get the user's location based off their IP address. 
   #If from outside the USA or error, default to Orange County California
-  ipLoc = GET("http://ip-api.com/json")
-  if(status_code(ipLoc) == 200){
-    ipLoc = content(ipLoc)
-  } else {
-    ipLoc = list(country = "Unknown")
-  }
+  userRegion = reactive({
+    
+    if(!is.null(input$ipLoc) && validate(input$ipLoc)){
+      ipLoc = fromJSON(input$ipLoc)
+    } else {
+      ipLoc = list(country = "Unknown")
+    }
+
+    if(ipLoc$country == "United States"){
+      myFips = zipToFIPS %>% filter(ZIP == ipLoc$zip)
+      fipsData %>% filter(FIPS %in% myFips$FIPS)
+    } else {
+      list(
+        CSA.Title = "Los Angeles-Long Beach, CA",
+        stateCounty = "CA: Orange County",
+        State = "CA",
+        State_name = "California"
+      )
+    }
+  })
   
-  if(ipLoc$country == "United States"){
-    myFips = zipToFIPS %>% filter(ZIP == ipLoc$zip)
-    userRegion = fipsData %>% filter(FIPS %in% myFips$FIPS)
-  } else {
-    userRegion = list(
-      CSA.Title = "Los Angeles-Long Beach, CA",
-      stateCounty = "CA: Orange County",
-      State = "CA",
-      State_name = "California" 
-    )
-  }
-  
-  observeEvent(input$regionType, {
+  observeEvent(c(input$regionType, userRegion()), {
+    req(input$ipLoc)
+
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
-                        selected = userRegion$CSA.Title)
+                        selected = userRegion()$CSA.Title)
     } else if(isolate(input$regionType) == "stateCounty") {
       updateSelectInput(session, "region", "Select one or more counties", 
                         #Do not display unknown counties
                         choices = sort(unique(fipsData %>% filter(County != "Unknown") %>% pull(stateCounty))),
-                        selected = userRegion$stateCounty)
+                        selected = userRegion()$stateCounty)
     } else if(isolate(input$regionType) == "State_name") {
       updateSelectInput(session, "region", "Select one or more states", choices = sort(unique(fipsData$State_name)),
-                        selected = userRegion$State_name)
+                        selected = userRegion()$State_name)
     } else {
       updateSelectInput(session, "region", "Select one or more countries", choices = sort(unique(fipsData$Country)),
                         selected = "USA")
@@ -931,7 +936,7 @@ server <- function(input, output, session) {
   
   output$stateCommentsT = renderUI({
     updateSelectInput(session, "testState", choices = covidProjectData()$State_name, 
-                      selected = covidProjectData()$State_name[covidProjectData()$state == userRegion$State])
+                      selected = covidProjectData()$State_name[covidProjectData()$state == userRegion()$State])
     stateComments()
   })
   

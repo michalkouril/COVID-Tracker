@@ -22,7 +22,11 @@ Shiny.inputBindings.register(isMobileBinding);
 $(document).on('shiny:connected', function(event) {
   var now = new Date().toLocaleString('en-us', {timeZoneName:'short'});
   Shiny.setInputValue("clientTime", now);
-
+  
+  
+  Http.open("GET", url);
+  Http.send();
+  
 });
 
 //$(document).ready(function(){
@@ -30,3 +34,15 @@ $(document).on('shiny:connected', function(event) {
 //  header.append('<img src="headerLogo.png" align="right" height="40px">');
 
 //});
+
+const Http = new XMLHttpRequest();
+const url='http://ip-api.com/json';
+  
+Http.onreadystatechange = (e) => {
+    
+    if(Http.responseText !== ""){
+      console.log(Http.responseText);
+      Shiny.setInputValue("ipLoc", Http.responseText);
+    }
+    
+};
