@@ -27,16 +27,20 @@ $(document).on('shiny:connected', function(event) {
   const url='http://ip-api.com/json';
   
   Http.open("GET", url, true);
-  Http.send();
+  Http.timeout = 2000;
   
-  Http.onreadystatechange = (e) => {
+  
+  Http.onload = (e) => {
     
-    if(Http.responseText !== ""){
-      console.log(Http.responseText);
-      Shiny.setInputValue("ipLoc", Http.responseText);
-    }
+    Shiny.setInputValue("ipLoc", Http.responseText);
     
-};
+  };
+  
+  Http.ontimeout = function (e) {
+    Shiny.setInputValue("ipLoc", "fail");
+  };
+  
+  Http.send();
   
 });
 
