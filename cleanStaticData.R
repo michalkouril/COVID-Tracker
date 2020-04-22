@@ -7,6 +7,7 @@ library(tigris)
 library(purrr)
 library(stringr)
 
+#Get all FIPS codes
 colnames(fips_codes) = str_to_sentence(colnames(fips_codes))
 fipsData = fips_codes %>% mutate(fips = paste0(State_code, County_code)) 
 
@@ -27,6 +28,12 @@ metroData = read.xlsx("data/metro_fips_codes.xlsx") %>%
   
 fipsData = fipsData %>% left_join(metroData, by = "fips") %>% mutate(FIPS = fips) %>% select(-fips)
 
+#Get the ZIP to FIPS data
+#https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.html#par_textimage_674173622
+zipToFIPS = read.table("data/zcta.txt", sep = ",", header = T, colClasses = "character") %>% 
+  select(ZIP = ZCTA5, STATE, COUNTY) %>% mutate(FIPS = paste0(STATE, COUNTY)) %>% 
+  distinct() %>% select(ZIP, FIPS)
+
 # test = fipsData %>% filter(str_detect(County, "Kendall"), State.Name == "Illinois") %>% pull(FIPS)
 # paste(test, collapse = ", ")
 # fipsData %>% filter(FIPS %in% c("36005", "36047", "36061", "36081", "36085"))
@@ -37,7 +44,8 @@ fipsData = fipsData %>% left_join(metroData, by = "fips") %>% mutate(FIPS = fips
 # paste(unlist(test), collapse = "', '")
 
 #Remove the NYC counties we'll merge
-fipsData = fipsData %>% filter(!FIPS %in% c("36005", "36047", "36061", "36081", "36085"))
+NYCfips = c("36005", "36047", "36061", "36081", "36085")
+fipsData = fipsData %>% filter(!FIPS %in% NYCfips)
 
 #Manually add NYC
 fipsData = rbind(fipsData, 
@@ -45,11 +53,24 @@ fipsData = rbind(fipsData,
            "35614", "4080", "New York-Newark-Jersey City, NY-NJ-PA", "Metropolitan Statistical Area",
            "New York-Jersey City-White Plains, NY-NJ", "New York-Newark, NY-NJ-CT-PA", "Central", "36124"))
 
+#Update the ZIPs FIPS
+zipToFIPS[zipToFIPS$FIPS %in% NYCfips, "FIPS"] = "36124"
+
 #Manually add Kansas City
 fipsData = rbind(fipsData, 
                  list('MO', '29', 'Missouri', '511', 'Kansas City', 703011, '28140', 
                       'NA', '312', 'Kansas City, MO-KS', 'Metropolitan Statistical Area', 
                       'NA', 'Kansas City-Overland Park-Kansas City, MO-KS', 'Central', '29511'))
+
+#Add all the zip codes for the counties to the list with the new fips
+zipToFIPS = rbind(
+  zipToFIPS,
+  data.frame(
+    ZIP = zipToFIPS %>% filter(FIPS %in% c("29037", "29047", "29095", "29165")) %>% 
+      pull(ZIP),
+    FIPS = '29511'
+  )
+)
 
 
 #Edit Cook county Chicago
@@ -81,3 +102,4 @@ fipsData = fipsData %>% mutate(Country = "USA") %>% filter(County_code != "515",
 
 #Save
 write.csv(fipsData, "data/fipsData.csv", row.names = F)
+write.csv(zipToFIPS, "data/zipToFIPS.csv", row.names = F)
