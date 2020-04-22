@@ -23,9 +23,20 @@ $(document).on('shiny:connected', function(event) {
   var now = new Date().toLocaleString('en-us', {timeZoneName:'short'});
   Shiny.setInputValue("clientTime", now);
   
+  const Http = new XMLHttpRequest();
+  const url='http://ip-api.com/json';
   
-  Http.open("GET", url);
+  Http.open("GET", url, true);
   Http.send();
+  
+  Http.onreadystatechange = (e) => {
+    
+    if(Http.responseText !== ""){
+      console.log(Http.responseText);
+      Shiny.setInputValue("ipLoc", Http.responseText);
+    }
+    
+};
   
 });
 
@@ -35,14 +46,6 @@ $(document).on('shiny:connected', function(event) {
 
 //});
 
-const Http = new XMLHttpRequest();
-const url='http://ip-api.com/json';
+
   
-Http.onreadystatechange = (e) => {
-    
-    if(Http.responseText !== ""){
-      console.log(Http.responseText);
-      Shiny.setInputValue("ipLoc", Http.responseText);
-    }
-    
-};
+
