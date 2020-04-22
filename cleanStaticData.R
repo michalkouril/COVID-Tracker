@@ -29,6 +29,7 @@ metroData = read.xlsx("data/metro_fips_codes.xlsx") %>%
 fipsData = fipsData %>% left_join(metroData, by = "fips") %>% mutate(FIPS = fips) %>% select(-fips)
 
 #Get the ZIP to FIPS data
+#https://www.census.gov/geographies/reference-files/time-series/geo/relationship-files.html#par_textimage_674173622
 zipToFIPS = read.table("data/zcta.txt", sep = ",", header = T, colClasses = "character") %>% 
   select(ZIP = ZCTA5, STATE, COUNTY) %>% mutate(FIPS = paste0(STATE, COUNTY)) %>% 
   distinct() %>% select(ZIP, FIPS)
