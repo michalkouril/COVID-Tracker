@@ -24,7 +24,7 @@ $(document).on('shiny:connected', function(event) {
   Shiny.setInputValue("clientTime", now);
   
   const Http = new XMLHttpRequest();
-  const url='http://ip-api.com/json';
+  const url='https://ip-api.com/json';
   
   Http.open("GET", url, true);
   Http.timeout = 2000;
