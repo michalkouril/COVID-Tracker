@@ -443,11 +443,11 @@ server <- function(input, output, session) {
     if(!is.null(input$ipLoc) && validate(input$ipLoc)){
       ipLoc = fromJSON(input$ipLoc)
     } else {
-      ipLoc = list(country = "Unknown")
+      ipLoc = list(country_code = "Unknown")
     }
 
-    if(ipLoc$country == "United States"){
-      myFips = zipToFIPS %>% filter(ZIP == ipLoc$zip)
+    if(ipLoc$country_code == "US"){
+      myFips = zipToFIPS %>% filter(ZIP == ipLoc$postal)
       fipsData %>% filter(FIPS %in% myFips$FIPS)
     } else {
       list(
