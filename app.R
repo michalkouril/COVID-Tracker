@@ -353,7 +353,7 @@ ui <- tagList(
                       tags$div(
                         tags$h4("Last Updates"), 
                         "The New York Times Data:", textOutput("updateTime", inline = T), br(),
-                        "The COVID-Project Data:", textOutput("updateTimeHospital", inline = T), br(),
+                        "COVID Tracking Project Data:", textOutput("updateTimeHospital", inline = T), br(),
                         HTML('App:&nbsp'), prettyDate(file.info("app.R")$mtime),
                         tags$br(),tags$br(),tags$h4("Summary"),
                         "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
@@ -929,7 +929,7 @@ server <- function(input, output, session) {
     HTML(sprintf("
                  The following states and territories had insufficient reporting and were not included: %s.<br><br>
                  * Indicates that the state's reporting of test results is sub-optimal and should be interpreted with care. For more information, visit the 
-                 <a href='https://covidtracking.com/about-data'>COVID-Tracking Project</a>'s website.<br><br>",
+                 <a href='https://covidtracking.com/about-data'>COVID Tracking Project</a>'s website.<br><br>",
                  paste(dataReliability() %>% filter(!grade %in% c("A", "B")) %>% 
                          pull(state) %>% sort(), collapse = ", ")))
   })
