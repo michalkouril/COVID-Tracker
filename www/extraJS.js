@@ -22,7 +22,30 @@ Shiny.inputBindings.register(isMobileBinding);
 $(document).on('shiny:connected', function(event) {
   var now = new Date().toLocaleString('en-us', {timeZoneName:'short'});
   Shiny.setInputValue("clientTime", now);
-
+  
+  const Http = new XMLHttpRequest();
+  const url='https://ipapi.co/json/';
+  
+  Http.open("GET", url, true);
+  Http.timeout = 2000;
+  
+  
+  Http.onload = (e) => {
+    
+    if(Http.status == 200){
+      Shiny.setInputValue("ipLoc", Http.responseText);
+    } else {
+      Shiny.setInputValue("ipLoc", "fail");
+    }
+    
+  };
+  
+  Http.ontimeout = function (e) {
+    Shiny.setInputValue("ipLoc", "fail");
+  };
+  
+  Http.send();
+  
 });
 
 //$(document).ready(function(){
@@ -30,3 +53,7 @@ $(document).on('shiny:connected', function(event) {
 //  header.append('<img src="headerLogo.png" align="right" height="40px">');
 
 //});
+
+
+  
+

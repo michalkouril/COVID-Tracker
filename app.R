@@ -18,6 +18,7 @@ if(!require(httr)) install.packages("httr", repos = "http://cran.us.r-project.or
 if(!require(DT)) install.packages("DT", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(tidyr)) install.packages("tidyr", repos = "http://cran.us.r-project.org")
+if(!require(jsonlite)) install.packages("jsonlite", repos = "http://cran.us.r-project.org")
 
 # This is to prevent the scientific notation in the plot's y-axis
 options(scipen=10000)
@@ -44,6 +45,9 @@ if(Sys.getenv("SHINY_PORT") == ""){
 fipsData = read.csv("data/fipsData.csv", stringsAsFactors = F,  colClasses = "character") %>% 
   mutate(POPESTIMATE2019 = as.integer(POPESTIMATE2019)) 
 unknownCounties = read.csv("data/unknownCounties.csv", stringsAsFactors = F, colClasses = "character")
+
+#ZIP to FIPS
+zipToFIPS = read.csv("data/zipToFIPS.csv", colClasses = "character")
 
 #Merge the state and county for search of county
 fipsData$stateCounty = paste0(fipsData$State, ": ", fipsData$County)
@@ -305,7 +309,7 @@ ui <- tagList(
                         sidebarPanel(
                           width = 4,
                           selectInput(inputId = "testState", label = "Select one or more states",
-                                      choices = "", selected = "New York",
+                                      choices = "", selected = "",
                                       multiple = T, selectize = T
                           ),
                           checkboxGroupInput("testCurve", "Tests", 
@@ -349,7 +353,7 @@ ui <- tagList(
                       tags$div(
                         tags$h4("Last Updates"), 
                         "The New York Times Data:", textOutput("updateTime", inline = T), br(),
-                        "The COVID-Project Data:", textOutput("updateTimeHospital", inline = T), br(),
+                        "COVID Tracking Project Data:", textOutput("updateTimeHospital", inline = T), br(),
                         HTML('App:&nbsp'), prettyDate(file.info("app.R")$mtime),
                         tags$br(),tags$br(),tags$h4("Summary"),
                         "This tool allows users to view COVID-19 data from across the United States. It works by merging county-level COVID-19 data from The New York Times with sources from the U.S. Census Bureau, mapping the data by metropolitan area.", tags$br(), tags$br(),
@@ -432,18 +436,43 @@ server <- function(input, output, session) {
   #Update the time on the page
   output$updateTimeHospital = renderText({prettyDate(max(covidProjectData()$date, na.rm = T))})
   
-  observeEvent(input$regionType, {
+  #Get the user's location based off their IP address. 
+  #If from outside the USA or error, default to Orange County California
+  userRegion = reactive({
+    
+    if(!is.null(input$ipLoc) && validate(input$ipLoc)){
+      ipLoc = fromJSON(input$ipLoc)
+    } else {
+      ipLoc = list(country_code = "Unknown")
+    }
+
+    if(ipLoc$country_code == "US"){
+      myFips = zipToFIPS %>% filter(ZIP == ipLoc$postal)
+      fipsData %>% filter(FIPS %in% myFips$FIPS)
+    } else {
+      list(
+        CSA.Title = "Los Angeles-Long Beach, CA",
+        stateCounty = "CA: Orange County",
+        State = "CA",
+        State_name = "California"
+      )
+    }
+  })
+  
+  observeEvent(c(input$regionType, userRegion()), {
+    req(input$ipLoc)
+
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
-                        selected = c("New Orleans-Metairie-Hammond, LA-MS", "San Jose-San Francisco-Oakland, CA"))
+                        selected = userRegion()$CSA.Title)
     } else if(isolate(input$regionType) == "stateCounty") {
       updateSelectInput(session, "region", "Select one or more counties", 
                         #Do not display unknown counties
                         choices = sort(unique(fipsData %>% filter(County != "Unknown") %>% pull(stateCounty))),
-                        selected = "CA: Orange County")
+                        selected = userRegion()$stateCounty)
     } else if(isolate(input$regionType) == "State_name") {
       updateSelectInput(session, "region", "Select one or more states", choices = sort(unique(fipsData$State_name)),
-                        selected = "Missouri")
+                        selected = userRegion()$State_name)
     } else {
       updateSelectInput(session, "region", "Select one or more countries", choices = sort(unique(fipsData$Country)),
                         selected = "USA")
@@ -900,14 +929,14 @@ server <- function(input, output, session) {
     HTML(sprintf("
                  The following states and territories had insufficient reporting and were not included: %s.<br><br>
                  * Indicates that the state's reporting of test results is sub-optimal and should be interpreted with care. For more information, visit the 
-                 <a href='https://covidtracking.com/about-data'>COVID-Tracking Project</a>'s website.<br><br>",
+                 <a href='https://covidtracking.com/about-data'>COVID Tracking Project</a>'s website.<br><br>",
                  paste(dataReliability() %>% filter(!grade %in% c("A", "B")) %>% 
                          pull(state) %>% sort(), collapse = ", ")))
   })
   
   output$stateCommentsT = renderUI({
     updateSelectInput(session, "testState", choices = covidProjectData()$State_name, 
-                      selected = covidProjectData()$State_name[str_detect(covidProjectData()$State_name, "New York")])
+                      selected = covidProjectData()$State_name[covidProjectData()$state == userRegion()$State])
     stateComments()
   })
   
