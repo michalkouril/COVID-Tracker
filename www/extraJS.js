@@ -32,7 +32,11 @@ $(document).on('shiny:connected', function(event) {
   
   Http.onload = (e) => {
     
-    Shiny.setInputValue("ipLoc", Http.responseText);
+    if(Http.status == 200){
+      Shiny.setInputValue("ipLoc", Http.responseText);
+    } else {
+      Shiny.setInputValue("ipLoc", "fail");
+    }
     
   };
   
