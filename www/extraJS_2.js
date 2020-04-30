@@ -18,33 +18,51 @@ $.extend(isMobileBinding, {
 
 Shiny.inputBindings.register(isMobileBinding);
 
+function createCORSRequest(method, url){
+  var xhr = new XMLHttpRequest();
+  if ("withCredentials" in xhr){
+    // XHR has 'withCredentials' property only if it supports CORS
+    xhr.open(method, url, true);
+    xhr.timeout = 2000;
+  } else if (typeof XDomainRequest != "undefined"){ // if IE use XDR
+    xhr = new XDomainRequest();
+    xhr.open(method, url);
+    xhr.timeout = 2000;
+  } else {
+    return "fail";
+  }
+  
+  return xhr;
+}
+
+
 //User time
 $(document).on('shiny:connected', function(event) {
   var now = new Date().toLocaleString('en-us', {timeZoneName:'short'});
   Shiny.setInputValue("clientTime", now);
   
-  const Http = new XMLHttpRequest();
-  const url='https://ipapi.co/json/';
-  
-  Http.open("GET", url, true);
-  Http.timeout = 2000;
-  
-  
-  Http.onload = (e) => {
+  var request = createCORSRequest( "get", "https://ipapi.co/json/" );
+  if ( request != "fail" ){
     
-    if(Http.status == 200){
-      Shiny.setInputValue("ipLoc", Http.responseText);
-    } else {
+    // Define a callback function
+    request.onload = function(){
+  	 if(request.status == 200){
+        Shiny.setInputValue("ipLoc", request.responseText);
+      } else {
+        Shiny.setInputValue("ipLoc", "fail");
+      }
+    };
+    
+    // On timeout
+    request.ontimeout = function (e) {
       Shiny.setInputValue("ipLoc", "fail");
-    }
+    };
     
-  };
-  
-  Http.ontimeout = function (e) {
+    // Send request
+    request.send();
+  } else {
     Shiny.setInputValue("ipLoc", "fail");
-  };
-  
-  Http.send();
+  }
   
 });
 

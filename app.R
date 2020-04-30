@@ -34,7 +34,7 @@ if(Sys.getenv("SHINY_PORT") == ""){
 } else{
   print("ONLINE MODE")
   use_online_data = T
-  use_google_analytics = T
+  use_google_analytics = F
 } 
 
 
@@ -250,7 +250,7 @@ labelPos = function(maxX, maxY, startCases = 10, daysToDouble = 3, population = 
 #Function to detect if a mobile device is used (for plot size)
 mobileDetect <- function(inputId, value = 0) {
   tagList(
-    singleton(tags$head(tags$script(src = "extraJS_1.js"))),
+    singleton(tags$head(tags$script(src = "extraJS_2.js"))),
     tags$input(id = inputId,
                class = "mobile-element",
                type = "hidden")
@@ -460,7 +460,7 @@ server <- function(input, output, session) {
   })
   
   observeEvent(c(input$regionType, userRegion()), {
-    req(input$ipLoc)
+    #req(input$ipLoc)
 
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
