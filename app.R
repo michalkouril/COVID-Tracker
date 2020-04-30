@@ -460,7 +460,7 @@ server <- function(input, output, session) {
   })
   
   observeEvent(c(input$regionType, userRegion()), {
-    req(input$ipLoc)
+    #req(input$ipLoc)
 
     if(input$regionType == "CSA.Title"){
       updateSelectInput(session, "region", "Select one or more metro areas", choices = sort(unique(fipsData$CSA.Title)),
