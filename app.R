@@ -153,8 +153,8 @@ covidProjectData = reactivePoll(intervalMillis = 3.6E+6, session = NULL, checkFu
                                         select(state,State_name,Population,posNeg,positive,negative,date) %>%
                                         gather(category,count,-state, -State_name, -Population,-date) %>% 
                                         left_join(dataReliability, by = "state") %>% 
-                                        filter(grade %in% c("A", "B")) %>% 
-                                        mutate(State_name = paste(State_name, ifelse(grade == "A", "", "*")))
+                                        filter(dataQualityGrade %in% c("A+", "A", "B")) %>% 
+                                        mutate(State_name = paste(State_name, ifelse(dataQualityGrade %in% c("A+", "A"), "", "*")))
                                       
                                       #Edit the order of the labels by descending y-value
                                       myOrder = data %>% group_by(state, State_name) %>% summarise(count = max(count)) %>% arrange(desc(count))
@@ -188,7 +188,7 @@ dataReliability = reactivePoll(intervalMillis = 8.6E+7, session = NULL, checkFun
                                  if(status_code(data) == 200){
                                    
                                    data = content(data)
-                                   write.csv(data %>% select(state, grade), "data/dataReliability.csv", row.names = F)
+                                   write.csv(data %>% select(state, dataQualityGrade), "data/dataReliability.csv", row.names = F)
                                    print("Reliability data succesfully refreshed")
                                    data
                                    
@@ -930,7 +930,7 @@ server <- function(input, output, session) {
                  The following states and territories had insufficient reporting and were not included: %s.<br><br>
                  * Indicates that the state's reporting of test results is sub-optimal and should be interpreted with care. For more information, visit the 
                  <a href='https://covidtracking.com/about-data'>COVID Tracking Project</a>'s website.<br><br>",
-                 paste(dataReliability() %>% filter(!grade %in% c("A", "B")) %>% 
+                 paste(dataReliability() %>% filter(!dataQualityGrade %in% c("A+", "A", "B")) %>% 
                          pull(state) %>% sort(), collapse = ", ")))
   })
   
